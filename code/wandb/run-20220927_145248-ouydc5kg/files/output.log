@@ -1,0 +1,30 @@
+cwd /home/xush/Project/AICompetition/feedback-prize/code
+train.shape: (3911, 8)
+        text_id                                          full_text  cohesion  syntax  vocabulary  phraseology  grammar  conventions
+0  0016926B079C  I think that students would benefit from learn...       3.5     3.5         3.0          3.0      4.0          3.0
+1  0022683E9EA5  When a problem is a change you have to let it ...       2.5     2.5         3.0          2.0      2.0          2.5
+2  00299B378633  Dear, Principal\n\nIf u change the school poli...       3.0     3.5         3.0          3.0      3.0          2.5
+3  003885A45F42  The best time in life is when you become yours...       4.5     4.5         4.5          4.5      4.0          5.0
+4  0049B1DF5CCC  Small act of kindness can impact in other peop...       2.5     3.0         3.0          3.0      2.5          2.5
+test.shape: (3, 2)
+        text_id                                          full_text
+0  0000C359D63E  when a person has no experience on a job their...
+1  000BAD50D026  Do you think students would benefit from being...
+2  00367BB2546B  Thomas Jefferson once states that "it is wonde...
+submission.shape: (3, 7)
+        text_id  cohesion  syntax  vocabulary  phraseology  grammar  conventions
+0  0000C359D63E       3.0     3.0         3.0          3.0      3.0          3.0
+1  000BAD50D026       3.0     3.0         3.0          3.0      3.0          3.0
+2  00367BB2546B       3.0     3.0         3.0          3.0      3.0          3.0
+fold
+0    978
+1    977
+2    978
+3    978
+dtype: int64
+Traceback (most recent call last):
+  File "/home/xush/Project/AICompetition/feedback-prize/code/main.py", line 37, in <module>
+    tokenizer.save_pretrained(output_dir+'tokenizer/')
+  File "/home/xush/miniconda3/envs/EnglishLearnTorch/lib/python3.6/site-packages/transformers/models/auto/tokenization_auto.py", line 552, in from_pretrained
+    "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+ValueError: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.

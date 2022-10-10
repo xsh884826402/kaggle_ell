@@ -1,0 +1,18 @@
+{
+    "os": "Linux-4.4.0-142-generic-x86_64-with-debian-stretch-sid",
+    "python": "3.6.13",
+    "heartbeatAt": "2022-09-27T06:48:18.077283",
+    "startedAt": "2022-09-27T06:48:16.821421",
+    "docker": null,
+    "gpu": "NVIDIA TITAN Xp",
+    "gpu_count": 1,
+    "cpu_count": 16,
+    "cuda": "10.2.89",
+    "args": [],
+    "state": "running",
+    "program": "/home/xush/Project/AICompetition/feedback-prize/code/config.py",
+    "codePath": "config.py",
+    "host": "ubuntu-ThinkStation-P720",
+    "username": "xush",
+    "executable": "/home/xush/miniconda3/envs/EnglishLearnTorch/bin/python"
+}

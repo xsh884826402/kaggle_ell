@@ -1,0 +1,58 @@
+brotlipy==0.7.0
+certifi==2022.9.24
+cffi @ file:///home/conda/feedstock_root/build_artifacts/cffi_1625835287197/work
+charset-normalizer==2.0.12
+click==8.0.4
+colorama @ file:///home/conda/feedstock_root/build_artifacts/colorama_1655412516417/work
+cryptography @ file:///home/conda/feedstock_root/build_artifacts/cryptography_1634230300355/work
+dataclasses==0.8
+docker-pycreds==0.4.0
+filelock==3.4.1
+gitdb @ file:///home/conda/feedstock_root/build_artifacts/gitdb_1635085722655/work
+GitPython @ file:///home/conda/feedstock_root/build_artifacts/gitpython_1603460643560/work
+huggingface-hub==0.4.0
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1663625384323/work
+importlib-metadata==4.8.3
+importlib-resources==5.4.0
+iterative-stratification==0.1.7
+joblib @ file:///home/conda/feedstock_root/build_artifacts/joblib_1663332044897/work
+mkl-fft==1.2.0
+mkl-random==1.2.0
+mkl-service==2.3.0
+numpy @ file:///tmp/build/80754af9/numpy_and_numpy_base_1603487797006/work
+olefile @ file:///home/conda/feedstock_root/build_artifacts/olefile_1602866521163/work
+packaging==21.3
+pandas==1.1.5
+pathtools==0.1.2
+Pillow @ file:///home/conda/feedstock_root/build_artifacts/pillow_1625677830966/work
+promise @ file:///home/conda/feedstock_root/build_artifacts/promise_1632508105718/work
+protobuf==3.15.8
+psutil @ file:///tmp/build/80754af9/psutil_1612297621795/work
+pycparser @ file:///home/conda/feedstock_root/build_artifacts/pycparser_1593275161868/work
+pyOpenSSL @ file:///home/conda/feedstock_root/build_artifacts/pyopenssl_1663846997386/work
+pyparsing==3.0.9
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1610291458349/work
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1626286286081/work
+pytz @ file:///home/conda/feedstock_root/build_artifacts/pytz_1660580468234/work
+PyYAML==6.0
+regex==2022.9.13
+requests==2.27.1
+sacremoses==0.0.53
+scikit-learn @ file:///home/conda/feedstock_root/build_artifacts/scikit-learn_1630910533947/work
+scipy==1.5.4
+sentencepiece==0.1.97
+sentry-sdk @ file:///home/conda/feedstock_root/build_artifacts/sentry-sdk_1664213431913/work
+setproctitle @ file:///home/conda/feedstock_root/build_artifacts/setproctitle_1611604433054/work
+shortuuid @ file:///home/conda/feedstock_root/build_artifacts/shortuuid_1656529349686/work
+six @ file:///home/conda/feedstock_root/build_artifacts/six_1620240208055/work
+smmap @ file:///home/conda/feedstock_root/build_artifacts/smmap_1611376390914/work
+threadpoolctl @ file:///home/conda/feedstock_root/build_artifacts/threadpoolctl_1643647933166/work
+tokenizers==0.12.1
+torch==1.2.0
+torchvision==0.4.0a0
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1662214488106/work
+transformers==4.18.0
+typing_extensions==4.1.1
+urllib3==1.26.12
+wandb @ file:///home/conda/feedstock_root/build_artifacts/wandb_1659759599370/work
+zipp==3.6.0
