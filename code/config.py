@@ -5,7 +5,7 @@ class CFG:
     wandb = False
     competition = 'FB3'
     _wandb_kernel = 'nakama'
-    debug = False
+    debug = True
     apex = True
     print_freq = 20
     num_workers = 4

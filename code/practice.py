@@ -28,5 +28,12 @@
 # print(names)
 # with open('../data/tbnames_new.txt', 'w', encoding='utf-8') as f:
 #     f.write('\n'.join(names))
-import datetime
-print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+# import datetime
+# print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+import torch
+x1 = torch.tensor([[11, 21, 31], [21, 31, 41]], dtype=torch.int)
+x2 = torch.tensor([[12, 22, 32], [22, 32, 42]])
+
+
+x3 = torch.cat([x1, x2], dim=len(x1.shape)-1)
+print(x3.shape)

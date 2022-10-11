@@ -40,8 +40,21 @@ class CustomModel(nn.Module):
         if self.cfg.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
         self.pool = MeanPooling()
-        self.fc = nn.Linear(self.config.hidden_size, 6)
-        self._init_weights(self.fc)
+
+        self.fc0 = nn.Linear(self.config.hidden_size, 1)
+        self.fc1 = nn.Linear(self.config.hidden_size, 1)
+        self.fc2 = nn.Linear(self.config.hidden_size, 1)
+        self.fc3 = nn.Linear(self.config.hidden_size, 1)
+        self.fc4 = nn.Linear(self.config.hidden_size, 1)
+        self.fc5 = nn.Linear(self.config.hidden_size, 1)
+
+        self._init_weights(self.fc0)
+        self._init_weights(self.fc1)
+        self._init_weights(self.fc2)
+        self._init_weights(self.fc3)
+        self._init_weights(self.fc4)
+        self._init_weights(self.fc5)
+
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -64,7 +77,13 @@ class CustomModel(nn.Module):
 
     def forward(self, inputs):
         feature = self.feature(inputs)
-        output = self.fc(feature)
+        output0 = self.fc0(feature)
+        output1 = self.fc0(feature)
+        output2 = self.fc0(feature)
+        output3 = self.fc0(feature)
+        output4 = self.fc0(feature)
+        output5 = self.fc0(feature)
+        output = torch.cat([output0, output1, output2, output3, output4, output5], dim=len(output0.shape)-1)
         return output
 
 # ====================================================
