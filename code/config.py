@@ -2,7 +2,7 @@
 # CFG
 # ====================================================
 class CFG:
-    wandb = True
+    wandb = False
     competition = 'FB3'
     _wandb_kernel = 'nakama'
     debug = False
