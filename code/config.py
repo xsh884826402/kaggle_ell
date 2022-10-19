@@ -2,7 +2,7 @@
 # CFG
 # ====================================================
 class CFG:
-    wandb = False
+    wandb = True
     competition = 'FB3'
     _wandb_kernel = 'nakama'
     debug = False
@@ -10,7 +10,6 @@ class CFG:
     print_freq = 20
     num_workers = 4
     model = "microsoft/deberta-v3-base"
-    # model = "../data/model/deberta-v3-base"
     gradient_checkpointing = True
     scheduler = 'cosine'  # ['linear', 'cosine']
     batch_scheduler = True
@@ -29,8 +28,8 @@ class CFG:
     max_grad_norm = 1000
     target_cols = ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
     seed = 42
-    n_fold = 4
-    trn_fold = [0, 1, 2, 3]
+    n_fold = 5
+    trn_fold = [0, 1, 2, 3, 4]
     train = True
 
 class InferCFG:
