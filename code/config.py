@@ -5,7 +5,7 @@ class CFG:
     wandb = False
     competition = 'FB3'
     _wandb_kernel = 'nakama'
-    debug = True
+    debug = False
     apex = True
     print_freq = 20
     num_workers = 4
@@ -16,9 +16,9 @@ class CFG:
     batch_scheduler = True
     num_cycles = 0.5
     num_warmup_steps = 0
-    epochs = 6
-    encoder_lr = 2e-5
-    decoder_lr = 2e-5
+    epochs = 10
+    encoder_lr = 2e-4
+    decoder_lr = 2e-4
     min_lr = 1e-6
     eps = 1e-6
     betas = (0.9, 0.999)
@@ -32,6 +32,7 @@ class CFG:
     n_fold = 4
     trn_fold = [0, 1, 2, 3]
     train = True
+    lstm_hidden_state = 6
 
 class InferCFG:
     num_workers=4

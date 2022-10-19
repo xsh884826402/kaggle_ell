@@ -36,4 +36,7 @@ x2 = torch.tensor([[12, 22, 32], [22, 32, 42]])
 
 
 x3 = torch.cat([x1, x2], dim=len(x1.shape)-1)
-print(x3.shape)
+print(x1.unsqueeze(2))
+print(x1.unsqueeze(2).shape)
+print(x1.unsqueeze(2).squeeze(2))
+print(x1.unsqueeze(2).squeeze(2).shape)
