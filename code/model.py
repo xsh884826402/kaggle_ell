@@ -41,6 +41,7 @@ class CustomModel(nn.Module):
             self.model.gradient_checkpointing_enable()
         self.pool = MeanPooling()
         self.fc = nn.Linear(self.config.hidden_size, 6)
+        torch.nn.LSTM()
         self._init_weights(self.fc)
 
     def _init_weights(self, module):

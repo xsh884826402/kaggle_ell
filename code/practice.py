@@ -28,5 +28,6 @@
 # print(names)
 # with open('../data/tbnames_new.txt', 'w', encoding='utf-8') as f:
 #     f.write('\n'.join(names))
-import datetime
-print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+# import datetime
+# # # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+import matplotlib.pyplot as plt

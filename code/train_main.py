@@ -270,6 +270,8 @@ def train_loop(folds, fold):
                         'predictions': predictions},
                        OUTPUT_DIR + f"{CFG.model.replace('/', '-')}_fold{fold}_best.pth")
 
+
+
     predictions = torch.load(OUTPUT_DIR + f"{CFG.model.replace('/', '-')}_fold{fold}_best.pth",
                              map_location=torch.device('cpu'))['predictions']
     valid_folds[[f"pred_{c}" for c in CFG.target_cols]] = predictions
