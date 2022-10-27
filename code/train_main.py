@@ -231,15 +231,24 @@ def train_loop(folds, fold):
 
     num_train_steps = int(len(train_folds) / CFG.batch_size * CFG.epochs)
     scheduler = get_scheduler(CFG, optimizer, num_train_steps)
-
+    #scheduler = load()
     # ====================================================
     # loop
     # ====================================================
     criterion = nn.SmoothL1Loss(reduction='mean')  # RMSELoss(reduction="mean")
 
     best_score = np.inf
-
-    for epoch in range(CFG.epochs):
+    start_epoch = -1
+    checkpoint_path = os.path.join(CFG.checkpoint_path, "cache.pth")
+    if os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        # print(checkpoint)
+        model.load_state_dict(checkpoint["net"])
+        optimizer.load_state_dict((checkpoint["optimizer"]))
+        start_epoch = (checkpoint["epoch"])
+        scheduler.load_state_dict((checkpoint["scheduler"]))
+        LOGGER.info("成功从{}加载缓存信息!".format(checkpoint_path))
+    for epoch in range(start_epoch+1, CFG.epochs):
 
         start_time = time.time()
 
@@ -269,8 +278,16 @@ def train_loop(folds, fold):
             torch.save({'model': model.state_dict(),
                         'predictions': predictions},
                        OUTPUT_DIR + f"{CFG.model.replace('/', '-')}_fold{fold}_best.pth")
-
-
+        print('scheduler dict', scheduler.state_dict())
+        checkpoint = {
+            "net": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "epoch": epoch,
+            "scheduler": scheduler.state_dict()
+        }
+        if not os.path.isdir(CFG.checkpoint_path):
+            os.makedirs(CFG.checkpoint_path)
+        torch.save(checkpoint, os.path.join(CFG.checkpoint_path, "cache.pth"))
 
     predictions = torch.load(OUTPUT_DIR + f"{CFG.model.replace('/', '-')}_fold{fold}_best.pth",
                              map_location=torch.device('cpu'))['predictions']

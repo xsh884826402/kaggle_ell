@@ -5,7 +5,7 @@ class CFG:
     wandb = False
     competition = 'FB3'
     _wandb_kernel = 'nakama'
-    debug = True
+    debug = False
     apex = True
     print_freq = 20
     num_workers = 4
@@ -31,6 +31,7 @@ class CFG:
     n_fold = 5
     trn_fold = [0, 1, 2, 3, 4]
     train = True
+    checkpoint_path = "../data/checkpoint"
 
 class InferCFG:
     num_workers=4

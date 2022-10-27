@@ -30,4 +30,8 @@
 #     f.write('\n'.join(names))
 # import datetime
 # # # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+
+import os
+for file in os.listdir("../data/output"):
+
