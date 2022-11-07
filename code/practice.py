@@ -32,6 +32,20 @@
 # # # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
 # import matplotlib.pyplot as plt
 
-import os
-for file in os.listdir("../data/output"):
-
+import numpy as np
+import pandas as pd
+# import pickle
+# print(np.argmax([1,2,4,2]))
+# with open('batch_pre', 'rb') as f:
+#     batch_pre = pickle.load(f)
+# with open('val_y', 'rb') as f:
+#     val_y = pickle.load(f)
+# def cal_mse(pred, label):
+#     pred = np.array(pred)
+#     label = np.array(label)
+#     pred = np.argmax(pred)
+a = [[1, 2, 3],[1, 2, 3]]
+na = np.array(a)
+print(np.argmax(na, axis=-1))
+print(na.transpose())
+p = pd.D
