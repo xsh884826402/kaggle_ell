@@ -1,0 +1,50 @@
+dataset_class: xsh_dataset
+model_class: classification
+architecture:
+    model_name: "/home/xush/Project/AICompetition/feedback-prize/data/debertav3base"
+    add_wide_dropout: false
+#    backbone: microsoft/deberta-large
+    dropout: 0.1
+    gradient_checkpointing: true
+    pretrained_weights: ''
+    total_num_classes: 54
+    num_classes_in_group: 9
+    num_classes: 6
+    loss_weights:
+        cross_entropy: 0.1
+        cross_entropy_smooth: 0
+        mse: 0.9
+        smooth_l1: 0
+    prediction_mode: weighted_avg
+dataset:
+    fold: -1
+    folds: 5
+    label_columns: ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
+    train_dataframe: data/feedback-prize-english-language-learning/custom_train.csv
+    train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/custom_train_add_fold_label.csv
+environment:
+    mixed_precision: true
+    number_of_workers: 4
+    seed: 42
+experiment_name: classification
+tokenizer_config:
+    lowercase: false
+    max_length: 512
+training:
+    add_types: false
+    batch_size: 8
+    differential_learning_rate: 1.0e-05
+    differential_learning_rate_layers: []
+    drop_last_batch: true
+    epochs: 1
+    grad_accumulation: 1
+    gradient_clip: 5
+    is_pseudo: false
+    learning_rate: 2.0e-05
+    loss_function: CrossEntropy
+    optimizer: AdamW
+    schedule: Linear
+    use_awp: false
+    warmup_epochs: 0.5
+    weight_decay: 0.001
+
