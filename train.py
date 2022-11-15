@@ -14,6 +14,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 from torch.utils.data import SequentialSampler, DataLoader
+from pytorchtools import EarlyStopping
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 import yaml
 from types import SimpleNamespace
@@ -31,7 +32,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 sys.path.append("models")
 sys.path.append("datasets")
-
+early_stopping = EarlyStopping(3, verbose=True)
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -131,8 +132,10 @@ def get_model(cfg):
     Net = importlib.import_module(cfg.model_class).Net
     return Net(cfg)
 
+
 def get_loss_fn(cfg):
     return importlib.import_module(cfg.model_class).loss_fn
+
 
 def get_kfold(cfg):
     if cfg.dataset.train_dataframe.endswith(".pq"):
@@ -156,6 +159,8 @@ for k, v in cfg.items():
         cfg[k] = SimpleNamespace(**v)
 cfg = SimpleNamespace(**cfg)
 print(cfg)
+for limit in cfg.training.gpu_limit:
+    torch.cuda.set_per_process_memory_fraction(limit['fraction'], limit['device'])
 
 os.makedirs(f"output/{cfg.experiment_name}", exist_ok=True)
 cfg.CustomDataset = importlib.import_module(cfg.dataset_class).CustomDataset
@@ -202,52 +207,78 @@ if __name__ == "__main__":
 
         no_decay = ["bias", "LayerNorm.weight"]
         differential_layers = cfg.training.differential_learning_rate_layers
-        optimizer = torch.optim.AdamW(
-            [
-                {
-                    "params": [
-                        param
-                        for name, param in model.named_parameters()
-                        if (not any(layer in name for layer in differential_layers))
-                        and (not any(nd in name for nd in no_decay))
-                    ],
-                    "lr": cfg.training.learning_rate,
-                    "weight_decay": cfg.training.weight_decay,
-                },
-                {
-                    "params": [
-                        param
-                        for name, param in model.named_parameters()
-                        if (not any(layer in name for layer in differential_layers))
-                        and (any(nd in name for nd in no_decay))
-                    ],
-                    "lr": cfg.training.learning_rate,
-                    "weight_decay": 0,
-                },
-                {
-                    "params": [
-                        param
-                        for name, param in model.named_parameters()
-                        if (any(layer in name for layer in differential_layers))
-                        and (not any(nd in name for nd in no_decay))
-                    ],
-                    "lr": cfg.training.differential_learning_rate,
-                    "weight_decay": cfg.training.weight_decay,
-                },
-                {
-                    "params": [
-                        param
-                        for name, param in model.named_parameters()
-                        if (any(layer in name for layer in differential_layers))
-                        and (any(nd in name for nd in no_decay))
-                    ],
-                    "lr": cfg.training.differential_learning_rate,
-                    "weight_decay": 0,
-                },
-            ],
-            lr=cfg.training.learning_rate,
-            weight_decay=cfg.training.weight_decay,
-        )
+
+        layer_wise_lr_decay_params = []
+        if cfg.training.layer_wise_lr_decay:
+            for name, p in model.named_parameters():
+                if name.startswith("model.encoder.layer"):
+                    # print(f'name: {name}: :')
+                    index = int(name.split(".")[3])
+                    layer_wise_lr_decay_params.append({"params": [p],
+                                                       "lr": cfg.training.learning_rate*cfg.training.layer_wise_lr_decay**(index+1),
+                                                       "weight_decay": 0
+                                                       })
+                elif name.startswith("model.encoder"):
+                    layer_wise_lr_decay_params.append({"params": [p],
+                                                       "lr": cfg.training.learning_rate * cfg.training.layer_wise_lr_decay ** (
+                                                                   13 + 1),
+                                                       "weight_decay": 0
+                                                       })
+
+        if  cfg.training.layer_wise_lr_decay:
+            optimizer = torch.optim.AdamW(
+                layer_wise_lr_decay_params,
+                lr=cfg.training.learning_rate,
+                weight_decay=cfg.training.weight_decay,
+            )
+        else:
+            optimizer = torch.optim.AdamW(
+                [
+                    {
+                        "params": [
+                            param
+                            for name, param in model.named_parameters()
+                            if (not any(layer in name for layer in differential_layers))
+                               and (not any(nd in name for nd in no_decay))
+                        ],
+                        "lr": cfg.training.learning_rate,
+                        "weight_decay": cfg.training.weight_decay,
+                    },
+                    {
+                        "params": [
+                            param
+                            for name, param in model.named_parameters()
+                            if (not any(layer in name for layer in differential_layers))
+                               and (any(nd in name for nd in no_decay))
+                        ],
+                        "lr": cfg.training.learning_rate,
+                        "weight_decay": 0,
+                    },
+                    {
+                        "params": [
+                            param
+                            for name, param in model.named_parameters()
+                            if (any(layer in name for layer in differential_layers))
+                               and (not any(nd in name for nd in no_decay))
+                        ],
+                        "lr": cfg.training.differential_learning_rate,
+                        "weight_decay": cfg.training.weight_decay,
+                    },
+                    {
+                        "params": [
+                            param
+                            for name, param in model.named_parameters()
+                            if (any(layer in name for layer in differential_layers))
+                               and (any(nd in name for nd in no_decay))
+                        ],
+                        "lr": cfg.training.differential_learning_rate,
+                        "weight_decay": 0,
+                    },
+                ],
+                lr=cfg.training.learning_rate,
+                weight_decay=cfg.training.weight_decay,
+            )
+
 
         scheduler = get_scheduler(cfg, optimizer, total_steps)
 
@@ -270,6 +301,7 @@ if __name__ == "__main__":
             losses = []
             gc.collect()
             model.train()
+            optimizer.zero_grad()
 
             # ==== TRAIN LOOP
             for itr in progress_bar:
@@ -286,110 +318,82 @@ if __name__ == "__main__":
                 else:
                     outputs = model(batch['input_ids'], batch['attention_mask'])
 
-                print('outputs', outputs)
-                print('outputs is in CUda?', outputs.logits.is_cuda)
-                print('labels. outputs.is_cuda', labels.is_cuda)
                 # cfg.architecture.loss_weights.to(device)
-                loss = model.loss_fn(outputs.logits, labels, cfg.architecture.loss_weights)
-                print('loss', loss)
-            #
-            #     losses.append(loss.item())
-            #
-            #     if cfg.training.grad_accumulation != 1:
-            #         loss /= cfg.training.grad_accumulation
-            #
-            #     if cfg.environment.mixed_precision:
-            #         scaler.scale(loss).backward()
-            #         if i % cfg.training.grad_accumulation == 0:
-            #             if cfg.training.gradient_clip > 0:
-            #                 scaler.unscale_(optimizer)
-            #                 torch.nn.utils.clip_grad_norm_(
-            #                     model.parameters(), cfg.training.gradient_clip
-            #                 )
-            #             scaler.step(optimizer)
-            #             scaler.update()
-            #             optimizer.zero_grad()
-            #     else:
-            #         loss.backward()
-            #         if i % cfg.training.grad_accumulation == 0:
-            #             if cfg.training.gradient_clip > 0:
-            #                 torch.nn.utils.clip_grad_norm_(
-            #                     model.parameters(), cfg.training.gradient_clip
-            #                 )
-            #             optimizer.step()
-            #             optimizer.zero_grad()
-            #
-            #     if scheduler is not None:
-            #         scheduler.step()
-            #
-            #     if cfg.curr_step % cfg.training.batch_size == 0:
-            #         progress_bar.set_description(
-            #             f"lr: {np.round(optimizer.param_groups[0]['lr'],7)}, loss: {np.mean(losses[-10:]):.4f}"
-            #         )
-            #
-            # progress_bar = tqdm(range(len(val_dataloader)))
-            # val_it = iter(val_dataloader)
-            #
-            # model.eval()
-            # preds = []
-            # probabilities = []
-            # all_targets = []
-            # for itr in progress_bar:
-            #     data = next(val_it)
-            #     batch = cfg.CustomDataset.batch_to_device(data, device)
-            #
-            #     if cfg.environment.mixed_precision:
-            #         with autocast():
-            #             output_dict = model(batch)
-            #     else:
-            #         output_dict = model(batch)
-            #
-            #     if cfg.dataset_class == "feedback_dataset":
-            #         for logits, word_start_mask, target in zip(
-            #             output_dict["logits"],
-            #             output_dict["word_start_mask"],
-            #             output_dict["target"],
-            #         ):
-            #             probs = (
-            #                 torch.softmax(logits[word_start_mask], dim=1)
-            #                 .detach()
-            #                 .cpu()
-            #                 .numpy()
-            #             )
-            #             targets = target[word_start_mask].detach().cpu().numpy()
-            #
-            #             for p, t in zip(probs, targets):
-            #                 probabilities.append(p)
-            #                 if cfg.training.is_pseudo:
-            #                     all_targets.append(np.argmax(t))
-            #                 else:
-            #                     all_targets.append(t)
-            #     else:
-            #         preds.append(
-            #             output_dict["logits"].float().softmax(dim=1).detach().cpu().numpy()
-            #         )
-            #
-            # if cfg.dataset_class == "feedback_dataset":
-            #     metric = log_loss(
-            #         all_targets,
-            #         np.vstack(probabilities),
-            #         eps=1e-7,
-            #         labels=list(range(cfg.dataset.num_classes)),
-            #     )
-            # else:
-            #     preds = np.concatenate(preds, axis=0)
-            #     if cfg.experiment_name != "pretrain-type-v9":
-            #         metric = log_loss(
-            #             val_df[cfg.dataset.label_columns].values.argmax(axis=1), preds
-            #         )
-            #     else:
-            #         metric = None
-            # print("Validation metric", metric)
-            # if metric < best_score:
-            #     best_score = metric
-            #     checkpoint = {"model": model.state_dict()}
-            #     torch.save(checkpoint, f"output/{cfg.experiment_name}/fold{fold}_checkpoint.pth")
+                loss = model.loss_fn(outputs if cfg.architecture.direct_result else outputs.logits, labels, cfg.architecture.loss_weights)
 
+                losses.append(loss.item())
+
+                if cfg.training.grad_accumulation != 1:
+                    loss /= cfg.training.grad_accumulation
+
+                if cfg.environment.mixed_precision:
+                    scaler.scale(loss).backward()
+                    if i % cfg.training.grad_accumulation == 0:
+                        if cfg.training.gradient_clip > 0:
+                            scaler.unscale_(optimizer)
+                            torch.nn.utils.clip_grad_norm_(
+                                model.parameters(), cfg.training.gradient_clip
+                            )
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
+                else:
+                    loss.backward()
+                    if i % cfg.training.grad_accumulation == 0:
+                        if cfg.training.gradient_clip > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                model.parameters(), cfg.training.gradient_clip
+                            )
+                        optimizer.step()
+                        optimizer.zero_grad()
+
+                if scheduler is not None:
+                    scheduler.step()
+
+                if cfg.curr_step % cfg.training.batch_size == 0:
+                    progress_bar.set_description(
+                        f"lr: {np.round(optimizer.param_groups[0]['lr'],7)}, loss: {np.mean(losses[-10:]):.4f}"
+                    )
+
+            progress_bar = tqdm(range(len(val_dataloader)))
+            val_it = iter(val_dataloader)
+
+            model.eval()
+            preds = []
+            losses = []
+            probabilities = []
+            all_targets = []
+            for itr in progress_bar:
+                inputs, labels = next(val_it)
+                inputs = cfg.CustomDataset.collate_fn(inputs)
+                batch = cfg.CustomDataset.batch_to_device(inputs, device)
+                labels = cfg.CustomDataset.batch_to_device(labels, device)
+
+                if cfg.environment.mixed_precision:
+                    with autocast():
+                        outputs = model(batch['input_ids'], batch['attention_mask'])
+                else:
+                    outputs = model(batch['input_ids'], batch['attention_mask'])
+
+                # preds.append(
+                #     outputs.logits.float().softmax(dim=1).detach().cpu().numpy()
+                # )
+                loss = model.loss_fn(outputs.detach() if cfg.architecture.direct_result else outputs.logits.detach(), labels, cfg.architecture.loss_weights).cpu().numpy()
+                losses.append(loss)
+
+            metric = np.mean(losses, axis=0)
+            print("Validation metric", metric)
+            if metric < best_score:
+                best_score = metric
+                checkpoint = {"model": model.state_dict()}
+                torch.save(checkpoint, f"output/{cfg.experiment_name}/fold{fold}_checkpoint.pth")
+
+            early_stopping(metric, model)
+            if early_stopping.early_stop:
+                print("Early Stopping")
+                break
+        del model
+        _ = gc.collect()
 
 
 
