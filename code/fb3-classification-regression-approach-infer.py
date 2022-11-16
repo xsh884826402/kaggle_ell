@@ -2,9 +2,9 @@ import os
 import math
 import string
 import random
-import shutil
 import warnings
 warnings.filterwarnings("ignore")
+from tqdm.notebook import tqdm
 
 import numpy as np
 import pandas as pd
@@ -23,88 +23,54 @@ from torchvision import datasets, models, transforms
 
 import transformers
 from transformers import AutoTokenizer, AutoModel, AutoConfig
-from transformers import AdamW, get_cosine_schedule_with_warmup
-from transformers import EarlyStoppingCallback, TrainerCallback
+from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import DataCollatorWithPadding
 from transformers import Trainer, TrainingArguments
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 import gc
 
-from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+# from catboost import CatBoostRegressor, Pool
+# from sklearn.linear_model import Ridge
+#
+# from skmultilearn.model_selection.iterative_stratification import iterative_train_test_split
 
 NotebookConfig = {
     "model_name": "../data/debertav3base",
-    "seed": 42,
+    "seed": 1111,
     "target_cols": ["cohesion", "syntax", "vocabulary",
                     "phraseology", "grammar", "conventions"],
     "num_classes": 6,
     "num_classes_in_group": 9,
 
+    "use_ensemble_weights": False,
+    "ensemble_size": 1,
+
+    # Inference config
+    "test_batch_size": 8,
+    "max_length": 512,
+
     "prediction_mode": "weighted_avg",  # operation to get predictions: ["weighted_avg","top"]
 
-    "loss_weights": {
-        "cross_entropy": 0.1,
-        "cross_entropy_smooth": 0,
-        "mse": 0.9,
-        "smooth_l1": 0,
-    },
-
-    "decay_loss": True,
-    "decay_min_weights": {
-        # "mse": 0.7,
-        # "smooth_l1": 0.05,
-        # "cross_entropy_smooth": 0.7,
-        "cross_entropy": 0.01
-    },
-    "loss_decay_mode": "cos",
-    "decay_epochs": 0.4,
-
-    "ensemble_size": 1,
-    "use_ensemble_weights": False,  # weights are not necessary
-
-    "dynamic_seed": True,
-
-    # Training config
-    "epochs": 10,
-    "learning_rate": 8e-6,
-    "min_lr": 1e-6,
-    "weight_decay": 1e-3,
-    "train_batch_size": 8,
-    "valid_batch_size": 8,
-    "max_length": 512,
     "n_fold": 5,
-    "n_accumulate": 1,
-    "max_grad_norm": 100,
-    "early_stopping_patience": 5,
-    "eval_per_epoch": 1
+    "input_path": os.path.abspath(f"./kaggle/temp"),
+    "inference_type": "mean",  # ["weighted", "mean", "best","cat_boost", "ridge"]
+    "inference_sub_type": "inverse",  # [None, "linear", "inverse"]
+
+    "round_submission": False
 }
 
 NotebookConfig["total_num_classes"] = int(NotebookConfig["num_classes"] * NotebookConfig["num_classes_in_group"])
 NotebookConfig["device"] = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+group_values = np.arange(1.0,5.5,step=0.5)
 
+model_paths = []
+for fold in range(0, NotebookConfig["n_fold"]):
+    model_paths += [os.path.join(NotebookConfig["input_path"],
+                                 f"outputs-{fold}/pytorch_model.bin")]
 
-def set_seed(seed=42):
-    '''Sets the seed of the entire notebook so results are the same every time we run.
-    This is for REPRODUCIBILITY.'''
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    # When running on the CuDNN backend, two further options must be set
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    # Set a fixed value for the hash seed
-    os.environ['PYTHONHASHSEED'] = str(seed)
-
-
-set_seed(NotebookConfig["seed"])
-
-df=pd.read_csv("../data/feedback-prize-english-language-learning/custom_train.csv")
-df[NotebookConfig["target_cols"]]=(df[NotebookConfig["target_cols"]]//0.5-2).astype(np.int)
-
-#label values
-group_values_cpu = torch.arange(1.0,5.5,step=0.5)
-group_values_gpu=group_values_cpu.to(NotebookConfig["device"])
+df = pd.read_csv("../data/feedback-prize-english-language-learning/custom_test.csv")
+train_df = pd.read_csv("../data/feedback-prize-english-language-learning/custom_train.csv")
 
 
 class FeedBackDataset(Dataset):
@@ -113,7 +79,6 @@ class FeedBackDataset(Dataset):
         self.max_len = max_length
         self.tokenizer = tokenizer
         self.texts = df['full_text'].values
-        self.targets = df[NotebookConfig['target_cols']].values
 
     def __len__(self):
         return len(self.df)
@@ -126,12 +91,10 @@ class FeedBackDataset(Dataset):
             add_special_tokens=True,
             max_length=self.max_len
         )
-        targets = self.targets[index]
 
         return {
             'input_ids': inputs['input_ids'],
             'attention_mask': inputs['attention_mask'],
-            'target': targets
         }
 
 
@@ -149,7 +112,7 @@ class MeanPooling(nn.Module):
 
 
 class FeedBackModel(nn.Module):
-    def __init__(self, model_name):
+    def __init__(self, model_name, pretrained_path=None, detach_fc=False):
         super(FeedBackModel, self).__init__()
         self.config = AutoConfig.from_pretrained(model_name)
         self.config.hidden_dropout_prob = 0
@@ -162,6 +125,11 @@ class FeedBackModel(nn.Module):
         self.pooler = MeanPooling()
         self.fc = nn.Linear(self.config.hidden_size, NotebookConfig['total_num_classes'])
 
+        self.detach_fc = detach_fc
+
+        if pretrained_path:
+            self.load_state_dict(torch.load(pretrained_path))
+
     def forward(self, input_ids, attention_mask):
         out = self.model(input_ids=input_ids,
                          attention_mask=attention_mask,
@@ -173,7 +141,9 @@ class FeedBackModel(nn.Module):
         # Multi-sample dropout
         for i in range(0, self.dropouts_len):
             x = self.dropouts[i](out)
-            x = self.fc(x)
+
+            if (not self.detach_fc):
+                x = self.fc(x)
 
             outputs += [x]
 
@@ -184,7 +154,7 @@ class FeedBackModel(nn.Module):
 
 
 class EnsembledModel(nn.Module):
-    def __init__(self, model_name, ensemble_size):
+    def __init__(self, model_name, ensemble_size, pretrained_path=None, detach_fc=False):
         super(EnsembledModel, self).__init__()
         self.config = AutoConfig.from_pretrained(model_name)
         self.config.hidden_dropout_prob = 0
@@ -198,10 +168,14 @@ class EnsembledModel(nn.Module):
         self.poolers = nn.ModuleList([MeanPooling() for i in range(0, self.ensemble_size)])
 
         self.fc = nn.Linear(self.config.hidden_size * self.ensemble_size, NotebookConfig['total_num_classes'])
+        self.detach_fc = detach_fc
 
         if (NotebookConfig["use_ensemble_weights"]):
             ensemble_weights = 0.9 + 0.2 * torch.rand(self.ensemble_size)
             self.ensemble_weights = torch.nn.Parameter(ensemble_weights)
+
+        if pretrained_path:
+            self.load_state_dict(torch.load(pretrained_path))
 
     def forward(self, input_ids, attention_mask):
 
@@ -224,352 +198,183 @@ class EnsembledModel(nn.Module):
                 ensemble_out = out
             else:
                 ensemble_out = torch.cat((ensemble_out, out), dim=1)
-
-        outputs = self.fc(ensemble_out)
+        if (not self.detach_fc):
+            outputs = self.fc(ensemble_out)
+        else:
+            outputs = ensemble_out
         return SequenceClassifierOutput(logits=outputs)
 
 
-# CrossEntropy loss for each group of one-hoted class
-class GroupCrossEntropy(nn.Module):
-    def __init__(self, reduction='mean', label_smoothing=0.0):
-        super().__init__()
-        self.sm_ce = nn.CrossEntropyLoss(reduction=reduction,
-                                         label_smoothing=label_smoothing)
-
-    def forward(self, y_pred, y_true):
-        y_pred = y_pred.reshape(
-            (y_pred.shape[0], NotebookConfig["num_classes_in_group"], NotebookConfig["num_classes"]))
-        # y_true=y_true.reshape((y_true.shape[0],NotebookConfig["num_classes"]))
-
-        loss = self.sm_ce(y_pred, y_true)
-
-        return loss
-
-
-# MSE-like loss for top value of each group of one-hoted class
-class GroupMSE(nn.Module):
-    def __init__(self, reduction='mean', mode="top", mse_loss=nn.MSELoss):
-        super().__init__()
-
-        self.sm = nn.Softmax(dim=1)
-        self.mse = mse_loss(reduction=reduction)
-        self.mode = mode
-
-    def forward(self, y_pred, y_true):
-
-        y_pred = y_pred.reshape(
-            (y_pred.shape[0], NotebookConfig["num_classes_in_group"], NotebookConfig["num_classes"]))
-        # y_true=y_true.reshape((y_true.shape[0],NotebookConfig["num_classes"]))
-
-        y_pred_sm = self.sm(y_pred)
-
-        if (self.mode == "top"):
-            top_y_pred_sm = torch.argmax(y_pred_sm, dim=1)
-
-            top_y_pred_sm = (top_y_pred_sm * 0.5) + 1.0
-            y_pred_vals = top_y_pred_sm
-
-        elif (self.mode == "weighted_avg"):
-            if (y_pred_sm.is_cuda):
-                weighted_avg_y_pred_sm = (y_pred_sm * group_values_gpu[None, :, None]).sum(dim=1)
-            else:
-                weighted_avg_y_pred_sm = (y_pred_sm * group_values_cpu[None, :, None]).sum(dim=1)
-
-            y_pred_vals = weighted_avg_y_pred_sm
-
-        y_true = (y_true * 0.5) + 1.0
-        loss = self.mse(y_pred_vals, y_true)
-        return loss
-
-
-def loss_fn(outputs, labels, loss_weights, reduction='mean'):
-    total_loss = 0.0
-
-    if (loss_weights["cross_entropy"] != 0):
-        loss_func = GroupCrossEntropy(reduction=reduction, label_smoothing=loss_weights["cross_entropy_smooth"])
-        total_loss += loss_weights["cross_entropy"] * loss_func(outputs.float(), labels)
-
-    if (loss_weights["mse"] != 0):
-        gmse_loss = GroupMSE(reduction=reduction,
-                             mode=NotebookConfig["prediction_mode"], mse_loss=nn.MSELoss)
-        total_loss += loss_weights["mse"] * gmse_loss(outputs.float(), labels.float())
-
-    if (loss_weights["smooth_l1"] != 0):
-        gsmooth_l1_loss = GroupMSE(reduction=reduction,
-                                   mode=NotebookConfig["prediction_mode"], mse_loss=nn.SmoothL1Loss)
-        total_loss += loss_weights["smooth_l1"] * gsmooth_l1_loss(outputs.float(), labels.float())
-
-    return total_loss
-
-
-# mean accuracy for all classes
-def accuracy_metric(logits, labels, mode="top"):
+def LogitsToPredictions(logits, mode="weighted_avg"):
+    logits = torch.from_numpy(logits)
     logits = logits.reshape((logits.shape[0], NotebookConfig["num_classes_in_group"], NotebookConfig["num_classes"]))
 
     if (mode == "top"):
-        predictions = torch.argmax(logits, dim=1)
+        predictions = torch.argmax(logits, dim=1) * 0.5 + 1.0
 
     elif (mode == "weighted_avg"):
         logits_sm = F.softmax(logits, dim=1)
-        predictions = (logits_sm * group_values_cpu[None, :, None]).sum(dim=1)
+        predictions = (logits_sm * group_values[None, :, None]).sum(dim=1)
         # to class indices
-        predictions = torch.round((predictions - 1.0) / 0.5).int()
+        if (NotebookConfig["round_submission"]):
+            predictions = (torch.round((predictions - 1.0) / 0.5).int()) * 0.5 + 1.0
 
-    corrects = (predictions == labels)
-
-    accuracy = corrects.sum().float() / float(labels.shape[0] * NotebookConfig["num_classes"])
-    return accuracy
+    return predictions.cpu().detach().numpy()
 
 
-def compute_metrics(p):
-    predictions, labels = map(torch.from_numpy, p)
+def get_predictions(model_paths, df, device, get_embeddings=False, gbs=None):
+    tokenizer = AutoTokenizer.from_pretrained(NotebookConfig['model_name'])
+    collate_fn = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    loss_func = lambda logits, labels: loss_fn(logits, labels,
-                                               loss_weights=NotebookConfig['loss_weights'], reduction="none")
-    loss = torch.mean(loss_func(predictions.float(), labels))
+    dataset = FeedBackDataset(df, tokenizer, max_length=NotebookConfig['max_length'])
 
-    gmse = GroupMSE(reduction="none", mode=NotebookConfig["prediction_mode"])
-    gmse_loss = torch.sqrt(gmse(predictions.float(), labels.float()) + 1e-9)
+    final_preds = []
+    for i, path in enumerate(model_paths):
+        if (NotebookConfig['ensemble_size'] == 1):
+            model = FeedBackModel(NotebookConfig['model_name'], pretrained_path=path, detach_fc=get_embeddings)
+        else:
+            model = EnsembledModel(NotebookConfig['model_name'], ensemble_size=NotebookConfig['ensemble_size'],
+                                   pretrained_path=path, detach_fc=get_embeddings)
 
-    metrics = {}
-    rmse_postfix = None
+        model.to(NotebookConfig['device'])
 
-    if (NotebookConfig["prediction_mode"] == "weighted_avg"):
-        rmse_postfix = "wa"
-    elif (NotebookConfig["prediction_mode"] == "top"):
-        rmse_postfix = "top"
+        print(f"Getting predictions for model {i}")
+        training_args = TrainingArguments(
+            output_dir=".",
+            per_device_eval_batch_size=NotebookConfig['test_batch_size'],
+            label_names=["target"]
+        )
+        trainer = Trainer(model=model,
+                          args=training_args,
+                          data_collator=collate_fn)
+        predictions = trainer.predict(dataset)
+        preds = predictions.predictions
 
-    metrics[f"cohesion_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 0])
-    metrics[f"syntax_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 1])
-    metrics[f"vocabulary_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 2])
-    metrics[f"phraseology_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 3])
-    metrics[f"grammar_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 4])
-    metrics[f"conventions_rmse_{rmse_postfix}"] = torch.mean(gmse_loss[:, 5])
+        preds = LogitsToPredictions(preds, mode=NotebookConfig["prediction_mode"])
 
-    metrics["accuracy_top"] = accuracy_metric(predictions, labels,
-                                              mode="top")
-    metrics["accuracy_wa"] = accuracy_metric(predictions, labels,
-                                             mode="weighted_avg")
+        final_preds.append(preds)
 
-    gmse = GroupMSE(reduction="mean", mode="top")
-    metrics["rmse_top"] = torch.sqrt(gmse(predictions.float(), labels.float()) + 1e-9)
+        del model
+        _ = gc.collect()
 
-    gmse = GroupMSE(reduction="mean", mode="weighted_avg")
-    metrics["rmse_wa"] = torch.sqrt(gmse(predictions.float(), labels.float()) + 1e-9)
+    final_preds = np.array(final_preds)
 
-    return metrics
+    if (gbs is not None):
+        for i in range(0, NotebookConfig["n_fold"]):
+            final_preds[i] = gbs[i].predict(final_preds[i])
 
-
-# callback to decay weights of losses
-class LossDecayCallback(TrainerCallback):
-    def __init__(self, decay_epochs, mode="linear"):
-        super().__init__()
-
-        self.skip_decay = True
-
-        self.weights_by_epoch = {}
-
-        self.epochs = decay_epochs
-
-        # min weights as a fraction of the original weights
-        min_weights_relative = NotebookConfig["decay_min_weights"]
-
-        shifted = False
-        for weight in min_weights_relative:
-            if (NotebookConfig['loss_weights'][weight] > 0):
-                max_weight = NotebookConfig['loss_weights'][weight]
-                min_weight = max_weight * min_weights_relative[weight]
-
-                x = np.array(list(range(0, self.epochs)))
-
-                if (mode == "linear"):
-                    step = (max_weight - min_weight) / float(self.epochs)
-                    self.weights_by_epoch[weight] = x * step + min_weight
-
-                elif (mode == "cos"):
-                    self.weights_by_epoch[weight] = (1.0 - np.sin((np.pi / 2) * x / self.epochs)) * (
-                                max_weight - min_weight) + min_weight
-
-                elif (mode == "min_max"):
-                    if (shifted):
-                        self.weights_by_epoch[weight] = [max_weight if i % 2 == 0 else min_weight for i in x]
-                    else:
-                        self.weights_by_epoch[weight] = [min_weight if i % 2 == 0 else max_weight for i in x]
-
-                    shifted = not shifted
-
-                elif (mode == "even_cos"):
-                    cos_weights = (1.0 - np.sin((np.pi / 2) * x / self.epochs)) * (max_weight - min_weight) + min_weight
-
-                    self.weights_by_epoch[weight] = [cos_weights[i] if i % 2 == int(shifted) else 0 for i in x]
-
-                    shifted = not shifted
-
-        if (len(self.weights_by_epoch) != 0):
-            self.skip_decay = False
-
-    def on_epoch_begin(self, args, state, control, **kwargs):
-        if (not self.skip_decay):
-            if (self.current_epoch < self.epochs):
-                for weight in self.weights_by_epoch:
-                    NotebookConfig['loss_weights'][weight] = self.weights_by_epoch[weight][self.current_epoch]
-
-                self.current_epoch += 1
-
-    def on_train_begin(self, args, state, control, **kwargs):
-        self.current_epoch = 0
-        display(self.weights_by_epoch)
+    return final_preds
 
 
-class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        outputs = model(inputs['input_ids'], inputs['attention_mask'])
-        loss = loss_fn(outputs.logits, inputs['target'], loss_weights=NotebookConfig['loss_weights'])
-        return (loss, outputs) if return_outputs else loss
+# Inference functions
+def fold_mean_inference(model_paths, test_dataset, device, get_embeddings=False, gbs=None):
+    print("Fold mean inference")
+
+    final_preds = get_predictions(model_paths, test_dataset, device, get_embeddings, gbs)
+    final_preds = np.mean(final_preds, axis=0)
+    return final_preds
 
 
-# use temp dir to avoid exceeding of allocated output dir space
-temp_dir = "./kaggle/temp"
-if not os.path.exists(temp_dir):
-    os.makedirs(temp_dir)
+def fold_weighted_mean_inference(model_paths, test_dataset, device, weights, get_embeddings=False, gbs=None):
+    print("Fold weighted mean inference")
 
-mskf = MultilabelStratifiedKFold(n_splits=NotebookConfig['n_fold'], shuffle=True, random_state=NotebookConfig['seed'])
+    final_preds = get_predictions(model_paths, test_dataset, device, get_embeddings, gbs)
 
-tokenizer = AutoTokenizer.from_pretrained(NotebookConfig['model_name'])
-collate_fn = DataCollatorWithPadding(tokenizer=tokenizer)
+    weights = torch.Tensor(weights)
+    weights = F.softmax(weights, dim=0).numpy()
 
-history = []
-ensemble_weights_history = []
-rnd_seed = NotebookConfig['seed']
+    final_preds = np.average(final_preds, axis=0, weights=weights)
+    return final_preds
 
-for fold, (train_ids, val_ids) in enumerate(mskf.split(X=df, y=df[NotebookConfig['target_cols']])):
-    print(f"========== Fold: {fold} ==========")
 
-    if (NotebookConfig['dynamic_seed']):
-        rnd_seed = NotebookConfig['seed'] + fold * 11
-        set_seed(rnd_seed)
+def best_fold_inference(model_paths, test_dataset, device, best_fold):
+    print("Best fold inference")
 
-    df_train = df.iloc[train_ids, :]
-    df_valid = df.iloc[val_ids, :]
+    best_fold_path = [model_paths[best_fold]]
+    final_preds = get_predictions(best_fold_path, test_dataset, device)
+    return final_preds[0]
 
-    train_dataset = FeedBackDataset(df_train, tokenizer=tokenizer, max_length=NotebookConfig['max_length'])
-    valid_dataset = FeedBackDataset(df_valid, tokenizer=tokenizer, max_length=NotebookConfig['max_length'])
 
-    if (NotebookConfig['ensemble_size'] == 1):
-        model = FeedBackModel(NotebookConfig['model_name'])
-    else:
-        model = EnsembledModel(NotebookConfig['model_name'], ensemble_size=NotebookConfig['ensemble_size'])
-    model.to(NotebookConfig['device'])
+def cat_boost_inference(model_paths, test_dataset, device, cat_boost_model, get_embeddings=False, gbs=None):
+    print("Cat boosted inference")
 
-    # Define Optimizer and Scheduler
-    param_optimizer = list(model.named_parameters())
+    final_preds = get_predictions(model_paths, test_dataset, device, get_embeddings, gbs)
+    final_preds = np.concatenate(final_preds, axis=1)
 
-    no_decay = ["bias", "LayerNorm.weight"]
-    optimizer_parameters = [
-        {
-            "params": [p for n, p in param_optimizer if (not any(nd in n for nd in no_decay) and n != "fc.weight")],
-            "weight_decay": NotebookConfig['weight_decay'],
-            "lr": NotebookConfig['learning_rate']
-        },
-        {
-            "params": [p for n, p in param_optimizer if (not any(nd in n for nd in no_decay) and n == "fc.weight")],
-            "weight_decay": NotebookConfig['weight_decay'],
-            "lr": NotebookConfig['learning_rate'] / 10
-        },
-        {
-            "params": [p for n, p in param_optimizer if (any(nd in n for nd in no_decay) and n == "fc.bias")],
-            "weight_decay": 0.0,
-            "lr": NotebookConfig['learning_rate'] / 10
-        },
-        {
-            "params": [p for n, p in param_optimizer if (any(nd in n for nd in no_decay) and n != "fc.bias")],
-            "weight_decay": 0.0,
-            "lr": NotebookConfig['learning_rate']
-        },
-    ]
-    optimizer = AdamW(optimizer_parameters, lr=NotebookConfig['learning_rate'])
+    final_preds = cat_boost_model.predict(final_preds)
+    return final_preds
 
-    num_training_steps_per_epoch = len(train_dataset) // (
-                NotebookConfig['train_batch_size'] * NotebookConfig['n_accumulate'])
-    num_training_steps = num_training_steps_per_epoch * NotebookConfig['epochs']
-    num_eval_steps_per_epoch = num_training_steps_per_epoch // NotebookConfig["eval_per_epoch"]
 
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=2 * num_training_steps_per_epoch,
-        num_training_steps=num_training_steps
-    )
+def ridge_inference(model_paths, test_dataset, device, ridge_model, get_embeddings=False, gbs=None):
+    print("Ridge inference")
 
-    callbacks = []
+    final_preds = get_predictions(model_paths, test_dataset, device, get_embeddings, gbs)
+    final_preds = np.concatenate(final_preds, axis=1)
 
-    early_stopping = EarlyStoppingCallback(early_stopping_patience=NotebookConfig['early_stopping_patience'])
-    callbacks += [early_stopping]
+    final_preds = ridge_model.predict(final_preds)
+    return final_preds
 
-    if (NotebookConfig["decay_loss"]):
-        loss_decay = LossDecayCallback(int(NotebookConfig['epochs'] * NotebookConfig['decay_epochs']),
-                                       mode=NotebookConfig["loss_decay_mode"])
-        callbacks += [loss_decay]
 
-    training_args = TrainingArguments(
-        output_dir=os.path.join(temp_dir, f"outputs-{fold}/"),
-        evaluation_strategy="steps",
-        eval_steps=num_eval_steps_per_epoch,
-        per_device_train_batch_size=NotebookConfig['train_batch_size'],
-        per_device_eval_batch_size=NotebookConfig['valid_batch_size'],
-        num_train_epochs=NotebookConfig['epochs'],
-        learning_rate=NotebookConfig['learning_rate'],
-        weight_decay=NotebookConfig['weight_decay'],
-        gradient_accumulation_steps=NotebookConfig['n_accumulate'],
-        max_grad_norm=NotebookConfig['max_grad_norm'],
-        seed=rnd_seed,
-        group_by_length=True,
-        metric_for_best_model='eval_rmse_wa',
-        load_best_model_at_end=True,
-        greater_is_better=False,
-        save_strategy="steps",
-        save_steps=num_eval_steps_per_epoch,
-        save_total_limit=1,
-        report_to="none",
-        label_names=["target"],
-        logging_steps=num_eval_steps_per_epoch
-    )
+if (NotebookConfig["inference_type"] in ["cat_boost", "ridge"]):
+    # train_preds = get_predictions(model_paths, train_df, NotebookConfig['device'], get_embeddings=True)
+    # you can use saved predictions or/and embeddings here
+    train_preds = np.load("../input/deberta-predictions/pedictions.npy")
 
-    trainer = CustomTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=valid_dataset,
-        data_collator=collate_fn,
-        optimizers=(optimizer, scheduler),
-        compute_metrics=compute_metrics,
-        callbacks=callbacks
-    )
+    # train_preds = np.concatenate(train_preds,axis=1)
+    print("train_preds.shape: ", train_preds.shape)
 
-    trainer.train()
-    trainer.save_model()
+    train_labels = train_df[NotebookConfig["target_cols"]]
+    print("train_labels.shape: ", train_labels.shape)
 
-    if (NotebookConfig['ensemble_size'] != 1 and NotebookConfig["use_ensemble_weights"]):
-        for name, param in model.named_parameters():
-            if (name == "ensemble_weights"):
-                ensemble_weights = param.cpu().detach().numpy()
-                ensemble_weights_history += [ensemble_weights]
-                break
+# display fold losses, find best fold and initialize weights
+best_eval_rmses = []
 
-    fold_history = trainer.state.log_history
-    history += [fold_history]
+if (NotebookConfig["prediction_mode"] == "top"):
+    filter_metric = "eval_rmse_top"
+elif (NotebookConfig["prediction_mode"] == "weighted_avg"):
+    filter_metric = "eval_rmse_wa"
 
-    del model
-    _ = gc.collect()
-    torch.cuda.empty_cache()
+for fold in range(0, NotebookConfig["n_fold"]):
+    fold_history_path = os.path.join(NotebookConfig["input_path"], f"history/hsitory_fold_{fold}.csv")
+    fold_history_rmse = pd.read_csv(fold_history_path)[filter_metric]
 
-#show fold best val rmse
-best_eval_rmses=[]
-for fold_history in history:
-    fold_best_eval_rmse=np.min(pd.DataFrame(fold_history)["eval_rmse_wa"])
-    best_eval_rmses+=[fold_best_eval_rmse]
+    fold_min_rmse = np.min(fold_history_rmse)
+    best_eval_rmses += [fold_min_rmse]
 
-best_eval_rmses_df=pd.DataFrame({"fold":list(range(0,NotebookConfig["n_fold"])),"best_eval_rmses":best_eval_rmses})
-display(best_eval_rmses_df)
+best_eval_rmses_df = pd.DataFrame(
+    {"fold": list(range(0, NotebookConfig["n_fold"])), "best_eval_rmses": best_eval_rmses})
+# display(best_eval_rmses_df)
 
-best_fold=best_eval_rmses_df[best_eval_rmses_df["best_eval_rmses"]==np.min(best_eval_rmses_df["best_eval_rmses"])]
-print(f"Fold {best_fold.fold.item()} has best eval rmse {best_fold.best_eval_rmses.item()}.")
+best_eval_rmse = np.min(best_eval_rmses_df["best_eval_rmses"])
+best_fold = best_eval_rmses_df[best_eval_rmses_df["best_eval_rmses"] == best_eval_rmse]
+print(f"Fold {best_fold.fold.item()} has best eval rmse {best_eval_rmse}.")
+
+weights = []
+if (NotebookConfig["inference_type"] == "weighted"):
+    if (NotebookConfig["inference_sub_type"] == "inverse"):
+        # 1/rmse
+        weights = 1 / (1 + (best_eval_rmses_df["best_eval_rmses"] - best_eval_rmse) * 10)
+    elif (NotebookConfig["inference_sub_type"] == "linear"):
+        # linear:  f(rmse)=k*rmse+d; f(max_rmse)=0; f(min_rmse)=1
+        a = best_eval_rmse  # best fold
+        b = np.max(best_eval_rmses_df["best_eval_rmses"])  # worst fold
+
+        k = -1 / (b - a)
+        d = b / (b - a)
+        weights = k * best_eval_rmses_df["best_eval_rmses"] + d
+
+    print("Weights: ", weights)
+
+preds=None
+if(NotebookConfig["inference_type"]=="best"):
+    preds = best_fold_inference(model_paths, df, NotebookConfig['device'], best_fold=best_fold.fold.item())
+elif(NotebookConfig["inference_type"]=="mean"):
+    preds = fold_mean_inference(model_paths, df, NotebookConfig['device'])
+elif(NotebookConfig["inference_type"]=="weighted"):
+    preds = fold_weighted_mean_inference(model_paths, df, NotebookConfig['device'],weights)
+
+
+if(NotebookConfig["round_submission"]):
+    preds=np.rint(preds/0.5)*0.5
+    preds
+preds.to_csv('submission.csv', index=False)

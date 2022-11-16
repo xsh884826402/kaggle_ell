@@ -9,7 +9,7 @@ class CFG:
     apex = True
     print_freq = 20
     num_workers = 4
-    model = "microsoft/deberta-v3-base"
+    model = "/home/xush/Project/AICompetition/feedback-prize/data/debertav3base"
     gradient_checkpointing = True
     scheduler = 'cosine'  # ['linear', 'cosine']
     batch_scheduler = True

@@ -44,8 +44,13 @@ import pandas as pd
 #     pred = np.array(pred)
 #     label = np.array(label)
 #     pred = np.argmax(pred)
-a = [[1, 2, 3],[1, 2, 3]]
-na = np.array(a)
-print(np.argmax(na, axis=-1))
-print(na.transpose())
-p = pd.D
+# a = [[1, 2, 3],[1, 2, 3]]
+# na = np.array(a)
+# print(np.argmax(na, axis=-1))
+# print(na.transpose())
+# p = pd.D
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+mskf = MultilabelStratifiedKFold()
+a = pd.DataFrame()
+a.to_csv()
+print("aa".sta)

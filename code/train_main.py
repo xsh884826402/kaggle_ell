@@ -63,6 +63,7 @@ tokenizer = AutoTokenizer.from_pretrained(CFG.model)
 # tokenizer.save_pretrained(OUTPUT_DIR+'tokenizer/')
 tokenizer.save_pretrained(os.path.join(OUTPUT_DIR, 'tokenizer/'))
 CFG.tokenizer = tokenizer
+print('--------------tokenizer success \n\n\n\n')
 
 # ====================================================
 # Define max_len
