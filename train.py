@@ -209,7 +209,7 @@ if __name__ == "__main__":
         differential_layers = cfg.training.differential_learning_rate_layers
 
         layer_wise_lr_decay_params = []
-        if cfg.training.layer_wise_lr_decay:
+        if cfg.training.layer_wise_lr_decay != -1:
             for name, p in model.named_parameters():
                 if name.startswith("model.encoder.layer"):
                     # print(f'name: {name}: :')
@@ -225,13 +225,15 @@ if __name__ == "__main__":
                                                        "weight_decay": 0
                                                        })
 
-        if  cfg.training.layer_wise_lr_decay:
+        if  cfg.training.layer_wise_lr_decay != -1:
             optimizer = torch.optim.AdamW(
                 layer_wise_lr_decay_params,
                 lr=cfg.training.learning_rate,
                 weight_decay=cfg.training.weight_decay,
             )
         else:
+            print('no lr decay \n\n\n')
+
             optimizer = torch.optim.AdamW(
                 [
                     {
@@ -302,6 +304,7 @@ if __name__ == "__main__":
             gc.collect()
             model.train()
             optimizer.zero_grad()
+            # print(f'model:  {model}')
 
             # ==== TRAIN LOOP
             for itr in progress_bar:
@@ -380,8 +383,8 @@ if __name__ == "__main__":
                 # )
                 loss = model.loss_fn(outputs.detach() if cfg.architecture.direct_result else outputs.logits.detach(), labels, cfg.architecture.loss_weights).cpu().numpy()
                 losses.append(loss)
-
-            metric = np.mean(losses, axis=0)
+            print(f'losses: {losses}')
+            metric = np.mean(losses)
             print("Validation metric", metric)
             if metric < best_score:
                 best_score = metric

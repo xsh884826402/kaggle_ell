@@ -55,6 +55,7 @@ class Net(nn.Module):
 
     # @staticmethod
     def loss_fn(self, outputs, labels, loss_weights, reduction='mean'):
+
         total_loss = 0.0
         labels = labels.long()
         #  to do 是否进行类型转换 if  self.cfg.device

@@ -19,8 +19,8 @@ architecture:
 dataset:
     folds: 5
     label_columns: ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
-    train_dataframe: data/feedback-prize-english-language-learning/custom_train.csv
-    train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/custom_train_add_fold_label.csv
+    train_dataframe: data/feedback-prize-english-language-learning/train.csv
+    train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/train_add_fold_label.csv
 environment:
     mixed_precision: true
     number_of_workers: 4
@@ -39,7 +39,7 @@ training:
     grad_accumulation: 1
     gradient_clip: 5
     is_pseudo: false
-    learning_rate: 8.0e-06
+    learning_rate: 8.0e-05
     loss_function: CrossEntropy
     optimizer: AdamW
     schedule: Linear
@@ -48,7 +48,7 @@ training:
     weight_decay: 0.001
     gpu_limit:
         - {device: 0, fraction: 0.8}
-    layer_wise_lr_decay: 0.9
+    layer_wise_lr_decay: -1
 predicting:
     batch_size: 8
     return_probs: false
