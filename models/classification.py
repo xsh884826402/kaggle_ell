@@ -1,8 +1,7 @@
 import torch
-import torch.nn.functional as F
+import numpy as np
 from torch import nn
 from transformers import AutoTokenizer, AutoConfig, AutoModel
-from torch.utils.checkpoint import checkpoint
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 class MeanPooling(nn.Module):
@@ -16,89 +15,6 @@ class MeanPooling(nn.Module):
         sum_mask = torch.clamp(sum_mask, min=1e-9)
         mean_embeddings = sum_embeddings / sum_mask
         return mean_embeddings
-
-
-# class Net(nn.Module):
-#     def __init__(self, cfg):
-#         super(Net, self).__init__()
-#
-#         self.cfg = cfg
-#
-#         config = AutoConfig.from_pretrained(cfg.architecture.backbone)
-#         self.backbone = AutoModel.from_pretrained(
-#             cfg.architecture.backbone, config=config
-#         )
-#
-#         if cfg.architecture.gradient_checkpointing:
-#             self.backbone.gradient_checkpointing_enable()
-#
-#         self.head = nn.Linear(self.backbone.config.hidden_size, cfg.dataset.num_classes)
-#         self.loss_fn = nn.CrossEntropyLoss(reduction="none")
-#         if (
-#             hasattr(self.cfg.architecture, "add_wide_dropout")
-#             and self.cfg.architecture.add_wide_dropout
-#         ):
-#             self.token_type_head = NBMEHead(
-#                 self.backbone.config.hidden_size, cfg.dataset.num_classes
-#             )
-#
-#     def forward(self, batch, calculate_loss=True):
-#         outputs = {}
-#
-#         if calculate_loss:
-#             outputs["target"] = batch["target"]
-#             outputs["word_start_mask"] = batch["word_start_mask"]
-#
-#         batch = batch_padding(self.cfg, batch)
-#
-#         x = self.backbone(
-#             input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]
-#         ).last_hidden_state
-#
-#         for obs_id in range(x.size()[0]):
-#             for w_id in range(int(torch.max(batch["word_ids"][obs_id]).item()) + 1):
-#                 chunk_mask = batch["word_ids"][obs_id] == w_id
-#                 chunk_logits = x[obs_id] * chunk_mask.unsqueeze(-1)
-#                 chunk_logits = chunk_logits.sum(dim=0) / chunk_mask.sum()
-#                 x[obs_id][chunk_mask] = chunk_logits
-#
-#         if (
-#             hasattr(self.cfg.architecture, "add_wide_dropout")
-#             and self.cfg.architecture.add_wide_dropout
-#         ):
-#             logits = self.token_type_head(x)
-#         else:
-#             if self.cfg.architecture.dropout > 0.0:
-#                 x = F.dropout(
-#                     x, p=self.cfg.architecture.dropout, training=self.training
-#                 )
-#
-#             logits = self.head(x)
-#
-#         if not self.training:
-#             outputs["logits"] = F.pad(
-#                 logits,
-#                 (0, 0, 0, self.cfg.tokenizer.max_length - logits.size()[1]),
-#                 "constant",
-#                 0,
-#             )
-#
-#         if calculate_loss:
-#             targets = batch["target"]
-#             new_logits = logits.view(-1, self.cfg.dataset.num_classes)
-#
-#             if self.cfg.training.is_pseudo:
-#                 new_targets = targets.reshape(-1, self.cfg.dataset.num_classes)
-#             else:
-#                 new_targets = targets.reshape(-1)
-#             new_word_start_mask = batch["word_start_mask"].reshape(-1)
-#
-#             loss = self.loss_fn(new_logits, new_targets)
-#             outputs["loss"] = (
-#                 loss * new_word_start_mask
-#             ).sum() / new_word_start_mask.sum()
-#
-#         return outputs
 
 
 class Net(nn.Module):
@@ -234,5 +150,14 @@ class GroupMSE(nn.Module):
         y_true = (y_true * 0.5) + 1.0
         loss = self.mse(y_pred_vals, y_true)
         return loss
+
+
+def predict(outputs, cfg):
+    outputs = outputs.reshape(outputs.shape[0], cfg.architecture.num_classes_in_group, cfg.architecture.num_classes)
+    outputs = torch.softmax(outputs, dim=1).detach().cpu().numpy()
+    results = outputs.reshape(outputs.shape[0], cfg.architecture.num_classes_in_group, cfg.architecture.num_classes)
+    results_label = np.argmax(results, axis=1)
+    results_probs = np.max(results, axis=1)
+    return results_label, results_probs
 
 

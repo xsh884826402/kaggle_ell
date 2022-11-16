@@ -27,7 +27,7 @@ environment:
     mixed_precision: true
     number_of_workers: 4
     seed: 42
-experiment_name: regression
+experiment_name: classification
 tokenizer_config:
     lowercase: false
     max_length: 512
@@ -51,4 +51,9 @@ training:
     gpu_limit:
         - {device: 0, fraction: 0.8}
     layer_wise_lr_decay:  0.9
+predicting:
+    batch_size: 8
+    return_probs: true
+device: "cuda:0"
+
 

@@ -49,4 +49,8 @@ training:
     gpu_limit:
         - {device: 0, fraction: 0.8}
     layer_wise_lr_decay: 0.9
+predicting:
+    batch_size: 8
+    return_probs: false
+device: "cuda:0"
 
