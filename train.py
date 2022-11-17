@@ -32,7 +32,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 sys.path.append("models")
 sys.path.append("datasets")
-early_stopping = EarlyStopping(3, verbose=True)
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -58,7 +57,7 @@ def get_val_dataloader(val_ds, cfg):
     val_dataloader = DataLoader(
         val_ds,
         shuffle=False,
-        batch_size=1,
+        batch_size=cfg.training.batch_size,
         num_workers=cfg.environment.number_of_workers,
         pin_memory=True,
         # collate_fn=cfg.CustomDataset.get_validation_collate_fn,
@@ -166,14 +165,13 @@ os.makedirs(f"output/{cfg.experiment_name}", exist_ok=True)
 cfg.CustomDataset = importlib.import_module(cfg.dataset_class).CustomDataset
 
 if __name__ == "__main__":
-    device = "cuda:0"
-    cfg.device = device
+    device = cfg.device
 
     if cfg.environment.seed < 0:
         cfg.environment.seed = np.random.randint(1_000_000)
     else:
         cfg.environment.seed = cfg.environment.seed
-
+ 
     set_seed(cfg.environment.seed)
 
     df = get_kfold(cfg)
@@ -181,6 +179,7 @@ if __name__ == "__main__":
     # tokenizer = transformers.AutoTokenizer.from_pretrained(cfg.architecture.model_name)
     for fold in range(cfg.dataset.folds):
         print(f'\n\n---------------------------FODL {fold}----------------------------------\n\n')
+        early_stopping = EarlyStopping(3, verbose=True)
         train_df = df[df['fold'] != fold].reset_index(drop=True)
         val_df = df[df['fold'] == fold].reset_index(drop=True)
 

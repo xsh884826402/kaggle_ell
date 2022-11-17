@@ -24,10 +24,10 @@ dataset:
     train_dataframe: data/feedback-prize-english-language-learning/train.csv
     train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/train_add_fold_label.csv
 environment:
-    mixed_precision: true
+    mixed_precision: false
     number_of_workers: 4
     seed: 42
-experiment_name: classification_debug
+experiment_name: classification_v1
 tokenizer_config:
     lowercase: false
     max_length: 512
@@ -37,7 +37,7 @@ training:
     differential_learning_rate: 4.0e-06
     differential_learning_rate_layers: []
     drop_last_batch: true
-    epochs: 10
+    epochs: 15
     grad_accumulation: 1
     gradient_clip: 5
     is_pseudo: false
@@ -49,11 +49,11 @@ training:
     warmup_epochs: 0.5
     weight_decay: 0.001
     gpu_limit:
-        - {device: 0, fraction: 0.8}
+        - {device: 0, fraction: 0.4}
     layer_wise_lr_decay:  -1
 predicting:
     batch_size: 8
     return_probs: true
-device: "cuda:0"
+device: "cpu"
 
 

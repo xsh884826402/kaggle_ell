@@ -25,7 +25,7 @@ environment:
     mixed_precision: true
     number_of_workers: 4
     seed: 42
-experiment_name: regression
+experiment_name: regression_v1
 tokenizer_config:
     lowercase: false
     max_length: 512
@@ -35,7 +35,7 @@ training:
     differential_learning_rate: 4.0e-06
     differential_learning_rate_layers: []
     drop_last_batch: true
-    epochs: 10
+    epochs: 15
     grad_accumulation: 1
     gradient_clip: 5
     is_pseudo: false

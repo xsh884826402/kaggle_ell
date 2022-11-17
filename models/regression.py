@@ -120,9 +120,8 @@ class Net(nn.Module):
 
     # @staticmethod
     def loss_fn(self, outputs, labels, loss_weights=None, reduction='mean'):
-        print(f'output : {outputs}')
-        print(f' labels: {labels}')
         return nn.SmoothL1Loss(reduction='mean')(outputs, labels)
+
 
 def predict(outputs, cfg):
     return outputs.detach().cpu().numpy()
