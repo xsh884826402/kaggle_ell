@@ -136,11 +136,12 @@ def get_loss_fn(cfg):
     return importlib.import_module(cfg.model_class).loss_fn
 
 
-def get_kfold(cfg):
-    if cfg.dataset.train_dataframe.endswith(".pq"):
-        train_df = pd.read_parquet(cfg.dataset.train_dataframe)
-    else:
-        train_df = pd.read_csv(cfg.dataset.train_dataframe)
+def get_kfold(cfg, train_df=None):
+    if train_df is None:
+        if cfg.dataset.train_dataframe.endswith(".pq"):
+            train_df = pd.read_parquet(cfg.dataset.train_dataframe)
+        else:
+            train_df = pd.read_csv(cfg.dataset.train_dataframe)
     mskf = MultilabelStratifiedKFold(n_splits=cfg.dataset.folds, shuffle=True, random_state=cfg.environment.seed)
     print('label cols', cfg.dataset.label_columns)
     for fold, (train_index, val_index) in enumerate(mskf.split(train_df, train_df[cfg.dataset.label_columns])):
@@ -173,10 +174,30 @@ if __name__ == "__main__":
         cfg.environment.seed = cfg.environment.seed
  
     set_seed(cfg.environment.seed)
-
-    df = get_kfold(cfg)
-    df.to_csv(cfg.dataset.train_dataframe_add_fold_label_path)
-    # tokenizer = transformers.AutoTokenizer.from_pretrained(cfg.architecture.model_name)
+    # 整理合并第一阶段模型输出
+    first_stage_outputs = []
+    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs )):
+        df_first_stage = pd.read_csv(file_path)
+        if not with_prob:
+            keys = [item + "_label" for item in cfg.dataset.label_columns]
+            values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            columns_dict = dict(zip(keys, values))
+        else:
+            label_keys = [item + "_label" for item in cfg.dataset.label_columns]
+            label_values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            prob_keys = [item + "_prob" for item in cfg.dataset.label_columns]
+            prob_values = [item + "_prob" + f"_{index}" for item in cfg.dataset.label_columns]
+            columns_dict = dict(zip(label_keys+prob_keys, label_values+prob_values))
+        df_first_stage.rename(columns=columns_dict, inplace=True)
+        first_stage_outputs.append(df_first_stage)
+    df = first_stage_outputs[0]
+    for tmp in first_stage_outputs[1:]:
+        df = df.merge(tmp, on=['text_id', 'full_text'])
+    print(df.columns)
+    keys = [item + "_x" for item in cfg.dataset.label_columns]
+    values = [item for item in cfg.dataset.label_columns]
+    df.rename(columns=dict(zip(keys, values)), inplace=True)
+    df = get_kfold(cfg, df)
     for fold in range(cfg.dataset.folds):
         print(f'\n\n---------------------------FODL {fold}----------------------------------\n\n')
         early_stopping = EarlyStopping(cfg.training.early_stop_patience, verbose=True)
@@ -185,7 +206,7 @@ if __name__ == "__main__":
 
         train_dataset = cfg.CustomDataset(train_df, cfg=cfg)
         val_dataset = cfg.CustomDataset(val_df, cfg=cfg)
-
+        print(f'input size {cfg.dataset.input_size}')
         cfg.train_dataset = train_dataset
 
         train_dataloader = get_train_dataloader(train_dataset, cfg)
@@ -308,18 +329,16 @@ if __name__ == "__main__":
                 i += 1
                 cfg.curr_step += cfg.training.batch_size
                 inputs, labels = next(tr_it)
-                inputs = cfg.CustomDataset.collate_fn(inputs)
                 batch = cfg.CustomDataset.batch_to_device(inputs, device)
                 labels = cfg.CustomDataset.batch_to_device(labels, device)
-
                 if cfg.environment.mixed_precision:
                     with autocast():
-                        outputs = model(batch['input_ids'], batch['attention_mask'])
+                        outputs = model(batch)
                 else:
-                    outputs = model(batch['input_ids'], batch['attention_mask'])
+                    outputs = model(batch)
 
                 # cfg.architecture.loss_weights.to(device)
-                loss = model.loss_fn(outputs if cfg.architecture.direct_result else outputs.logits, labels, cfg.architecture.loss_weights)
+                loss = model.loss_fn(outputs if cfg.architecture.direct_result else outputs.logits, labels)
 
                 losses.append(loss.item())
 
@@ -365,19 +384,15 @@ if __name__ == "__main__":
             all_targets = []
             for itr in progress_bar:
                 inputs, labels = next(val_it)
-                inputs = cfg.CustomDataset.collate_fn(inputs)
                 batch = cfg.CustomDataset.batch_to_device(inputs, device)
                 labels = cfg.CustomDataset.batch_to_device(labels, device)
 
                 if cfg.environment.mixed_precision:
                     with autocast():
-                        outputs = model(batch['input_ids'], batch['attention_mask'])
+                        outputs = model(batch)
                 else:
-                    outputs = model(batch['input_ids'], batch['attention_mask'])
+                    outputs = model(batch)
 
-                # preds.append(
-                #     outputs.logits.float().softmax(dim=1).detach().cpu().numpy()
-                # )
                 loss = model.loss_fn(outputs.detach() if cfg.architecture.direct_result else outputs.logits.detach(), labels, cfg.architecture.loss_weights).cpu().numpy()
                 losses.append(loss)
             print(f'losses: {losses}')

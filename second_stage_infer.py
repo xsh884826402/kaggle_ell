@@ -7,8 +7,7 @@ from tqdm import tqdm
 import gc
 import argparse
 import torch
-from torch.cuda.amp import GradScaler, autocast
-from sklearn.metrics import log_loss
+
 from transformers import (
     get_cosine_schedule_with_warmup,
     get_linear_schedule_with_warmup,
@@ -32,7 +31,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 sys.path.append("models")
 sys.path.append("datasets")
-early_stopping = EarlyStopping(3, verbose=True)
 
 
 def worker_init_fn(worker_id):
@@ -59,7 +57,7 @@ def get_val_dataloader(val_ds, cfg):
     val_dataloader = DataLoader(
         val_ds,
         shuffle=False,
-        batch_size=cfg.predicting.batch_size//2,
+        batch_size=cfg.predicting.batch_size,
         num_workers=cfg.environment.number_of_workers,
         pin_memory=True,
         # collate_fn=cfg.CustomDataset.get_validation_collate_fn,
@@ -99,15 +97,6 @@ def load_checkpoint(cfg, model, path):
     else:
         model_weights = d
 
-    # if (
-    #     model.backbone.embeddings.word_embeddings.weight.shape[0]
-    #     < model_weights["backbone.embeddings.word_embeddings.weight"].shape[0]
-    # ):
-    #     print("resizing pretrained embedding weights")
-    #     model_weights["backbone.embeddings.word_embeddings.weight"] = model_weights[
-    #         "backbone.embeddings.word_embeddings.weight"
-    #     ][: model.backbone.embeddings.word_embeddings.weight.shape[0]]
-
     try:
         model.load_state_dict(model_weights, strict=True)
     except Exception as e:
@@ -133,23 +122,56 @@ def get_model(cfg):
     Net = importlib.import_module(cfg.model_class).Net
     return Net(cfg)
 
+
 def get_predict_func(cfg):
     return importlib.import_module(cfg.model_class).predict
+
 
 def get_loss_fn(cfg):
     return importlib.import_module(cfg.model_class).loss_fn
 
 
-def get_kfold(cfg):
-    if cfg.dataset.train_dataframe.endswith(".pq"):
-        train_df = pd.read_parquet(cfg.dataset.train_dataframe)
+def merge_k_folds_result(df, direct_result):
+    if not direct_result:
+        def transform_func(x, column):
+            columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
+            labels = x[columns_label_folds].values
+            result = dict()
+            for label, prob in zip(labels, probs):
+                if label not in result.keys():
+                    result[label] = [1, prob]
+                else:
+                    result[label][0] += 1
+                    result[label][1] += prob
+            max_count = 0
+            avg_prob = 0
+            label = -1
+            for k, v in result.items():
+                count, prob = v
+                if count > max_count:
+                    label = k
+                    max_count = count
+                    avg_prob = prob / count
+            return label, avg_prob
+
+        columns = ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
+        for column in columns:
+            df[column + '_label'], df[column + '_prob'] = zip(*df.apply(transform_func, args=(column,), axis=1))
+        reserve_columns = ['text_id', 'full_text'] + [column + '_label' for column in columns] + [column + '_prob' for
+                                                                                                  column in columns]
+        return df[reserve_columns]
     else:
-        train_df = pd.read_csv(cfg.dataset.train_dataframe)
-    mskf = MultilabelStratifiedKFold(n_splits=cfg.dataset.folds, shuffle=True, random_state=cfg.environment.seed)
-    print('label cols', cfg.dataset.label_columns)
-    for fold, (train_index, val_index) in enumerate(mskf.split(train_df, train_df[cfg.dataset.label_columns])):
-        train_df.loc[val_index, 'fold'] = int(fold)
-    return train_df
+        def transform_func(x, column):
+            columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
+            columns_prob_folds = [column + '_prob' + f'_fold{i}' for i in range(5)]
+            labels = x[columns_label_folds].values
+            return np.mean(labels)
+
+        columns = ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
+        for column in columns:
+            df[column + '_label']= df.apply(transform_func, args=(column,), axis=1)
+        reserve_columns = ['text_id', 'full_text'] + [column + '_label' for column in columns]
+        return df[reserve_columns]
 
 
 parser = argparse.ArgumentParser(description="")
@@ -161,7 +183,7 @@ for k, v in cfg.items():
     if type(v) == dict:
         cfg[k] = SimpleNamespace(**v)
 cfg = SimpleNamespace(**cfg)
-cfg.CustomDataset = importlib.import_module(cfg.dataset_class).CustomDataset
+cfg.CustomInferDataset = importlib.import_module(cfg.dataset_class).CustomInferDataset
 
 if __name__ == "__main__":
 
@@ -171,15 +193,37 @@ if __name__ == "__main__":
         cfg.environment.seed = cfg.environment.seed
 
     set_seed(cfg.environment.seed)
+    # 整理合并第一阶段模型输出
+    first_stage_outputs = []
+    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs)):
+        df_first_stage = pd.read_csv(file_path)
+        if not with_prob:
+            keys = [item + "_label" for item in cfg.dataset.label_columns]
+            values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            columns_dict = dict(zip(keys, values))
+        else:
+            label_keys = [item + "_label" for item in cfg.dataset.label_columns]
+            label_values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            prob_keys = [item + "_prob" for item in cfg.dataset.label_columns]
+            prob_values = [item + "_prob" + f"_{index}" for item in cfg.dataset.label_columns]
+            columns_dict = dict(zip(label_keys + prob_keys, label_values + prob_values))
+        df_first_stage.rename(columns=columns_dict, inplace=True)
+        first_stage_outputs.append(df_first_stage)
+    df = first_stage_outputs[0]
+    for tmp in first_stage_outputs[1:]:
+        df = df.merge(tmp, on=['text_id', 'full_text'])
+    print(df.columns)
+    keys = [item + "_x" for item in cfg.dataset.label_columns]
+    values = [item for item in cfg.dataset.label_columns]
+    df.rename(columns=dict(zip(keys, values)), inplace=True)
 
-    df = pd.read_csv(cfg.dataset.train_dataframe_add_fold_label_path)
-    preds = []
+    val_df = df
+    df_k_folds = []
 
     for fold in range(cfg.dataset.folds):
         print(f'\n\n---------------------------FODL {fold}----------------------------------\n\n')
 
-        val_df = df[df['fold'] == fold].reset_index(drop=True)
-        val_dataset = cfg.CustomDataset(val_df, cfg=cfg)
+        val_dataset = cfg.CustomInferDataset(val_df, cfg=cfg)
         val_dataloader = get_val_dataloader(val_dataset, cfg)
 
         model = get_model(cfg)
@@ -191,16 +235,10 @@ if __name__ == "__main__":
         val_it = iter(val_dataloader)
         preds_per_fold = []
         for itr in progress_bar:
-            inputs, labels = next(val_it)
-            inputs = cfg.CustomDataset.collate_fn(inputs)
-            batch = cfg.CustomDataset.batch_to_device(inputs, cfg.device)
-            labels = cfg.CustomDataset.batch_to_device(labels, cfg.device)
+            inputs = next(val_it)
+            batch = cfg.CustomInferDataset.batch_to_device(inputs, cfg.device)
 
-            if cfg.environment.mixed_precision:
-                with autocast():
-                    outputs = model(batch['input_ids'], batch['attention_mask'])
-            else:
-                outputs = model(batch['input_ids'], batch['attention_mask'])
+            outputs = model(batch)
             predict_func = get_predict_func(cfg)
 
             if cfg.predicting.return_probs:
@@ -214,15 +252,22 @@ if __name__ == "__main__":
                 target_columns = ["cohesion", "syntax", "vocabulary", "phraseology", "grammar", "conventions"]
                 df_labels = pd.DataFrame(labels, columns=[item + '_label' for item in target_columns])
                 preds_per_fold.append(df_labels)
-
+            # print(f'df_labels {df_labels.head()}')
         df_preds_per_fold = pd.concat(preds_per_fold, axis=0)
-        print(f'len : {len(df_preds_per_fold)}')
-        preds.append(pd.concat([val_df.reset_index(drop=True), df_preds_per_fold.reset_index(drop=True)], axis=1))
-        del model
-        _ = gc.collect()
-    df_final = pd.concat(preds, axis=0)
-    df_final.to_csv(f"output/{cfg.experiment_name}/predicts.csv", index=False)
 
+        df_columns = df_preds_per_fold.columns
+        new_columns = [column + f"_fold{fold}" for column in df_columns]
+        df_preds_per_fold.columns = new_columns
+        df_k_folds.append(df_preds_per_fold.reset_index(drop=True))
+
+        del model
+        if "cuda" in cfg.device:
+            torch.cuda.empty_cache()
+        gc.collect()
+    df_final = pd.concat([val_df]+df_k_folds, axis=1)
+    print(f'df final {df_final.head()}')
+    df_final = merge_k_folds_result(df_final, direct_result=cfg.architecture.direct_result)
+    df_final.to_csv(f"output/{cfg.experiment_name}/{cfg.infering.infer_result_path}")
 
 
 

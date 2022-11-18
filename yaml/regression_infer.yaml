@@ -52,7 +52,9 @@ training:
     layer_wise_lr_decay: -1
     early_stop_patience: 4
 predicting:
-    batch_size: 4
+    batch_size: 8
     return_probs: false
-device: "cuda:0"
+infering:
+    infer_result_path: infer.csv
+device: "cpu"
 

@@ -1,37 +1,25 @@
-dataset_class: xsh_dataset
-model_class: classification
+dataset_class: second_stage_dataset
+model_class: second_stage
 architecture:
-    model_name: "/home/xush/Project/AICompetition/feedback-prize/data/debertav3base"
-    add_wide_dropout: false
-#    backbone: microsoft/deberta-large
-    dropout: 0.1
-    gradient_checkpointing: true
     pretrained_weights: ''
-    total_num_classes: 54
-    num_classes_in_group: 9
-    num_classes: 6
-    loss_weights:
-        cross_entropy: 0.1
-        cross_entropy_smooth: 0
-        mse: 0.9
-        smooth_l1: 0
     prediction_mode: weighted_avg
-    direct_result: false
+    direct_result: true
+    loss_weights: ''
 dataset:
     fold: -1
     folds: 5
     label_columns: ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
-    train_dataframe: data/feedback-prize-english-language-learning/train.csv
-    train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/train_add_fold_label.csv
-    infer_dataframe: data/feedback-prize-english-language-learning/test.csv
+    first_stage_outputs:
+        - ./output/classification_v1/predicts.csv
+        - ./output/regression_v1/predicts.csv
+    with_probs:
+        - true
+        - false
 environment:
     mixed_precision: false
     number_of_workers: 4
     seed: 42
-experiment_name: classification
-tokenizer_config:
-    lowercase: false
-    max_length: 512
+experiment_name: two_stage_nn
 training:
     add_types: false
     batch_size: 4
@@ -55,9 +43,9 @@ training:
     early_stop_patience: 4
 predicting:
     batch_size: 8
-    return_probs: true
+    return_probs: false
 infering:
     infer_result_path: infer.csv
-device: "cpu"
+device: "cuda:0"
 
 

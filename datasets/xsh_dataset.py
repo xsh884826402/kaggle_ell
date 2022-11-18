@@ -189,3 +189,58 @@ class CustomDataset(Dataset):
             return [CustomDataset.batch_to_device(value, device) for value in batch]
         else:
             raise ValueError(f"Can not move {type(batch)} to device.")
+
+class CustomInferDataset(Dataset):
+    def __init__(self, df, cfg):
+        self.cfg = cfg
+        self.texts = df['full_text'].values
+        self.cfg.tokenizer = transformers.AutoTokenizer.from_pretrained(self.cfg.architecture.model_name)
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        inputs = self._prepare_input(self.texts[item])
+        return inputs
+
+    def _prepare_input(self, text):
+        inputs = self.cfg.tokenizer.encode_plus(
+            text,
+            return_tensors=None,
+            add_special_tokens = True,
+            max_length =self.cfg.tokenizer_config.max_length,
+            pad_to_max_length=True,
+            truncation=True
+        )
+        for k, v in inputs.items():
+            inputs[k] = torch.tensor(v)
+        return inputs
+
+    @staticmethod
+    def collate_fn(inputs):
+        mask_len = int(inputs["attention_mask"].sum(axis=1).max())
+        for k, v in inputs.items():
+            inputs[k] = inputs[k][:, :mask_len]
+        return inputs
+
+    @staticmethod
+    def get_validation_collate_fn(inputs):
+        # print('inputs', inputs)
+        mask_len = int(inputs["attention_mask"].sum(axis=1).max())
+        for k, v in inputs.items():
+            inputs[k] = inputs[k][:, :mask_len]
+        return inputs
+
+    @staticmethod
+    def batch_to_device(batch, device):
+        if isinstance(batch, torch.Tensor):
+            return batch.to(device)
+        elif isinstance(batch, collections.abc.Mapping):
+            return {
+                key: CustomDataset.batch_to_device(value, device)
+                for key, value in batch.items()
+            }
+        elif isinstance(batch, collections.abc.Sequence):
+            return [CustomDataset.batch_to_device(value, device) for value in batch]
+        else:
+            raise ValueError(f"Can not move {type(batch)} to device.")
