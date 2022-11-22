@@ -144,7 +144,9 @@ def merge_k_folds_result(df, direct_result):
     if not direct_result:
         def transform_func(x, column):
             columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
+            columns_prob_folds = [column + '_prob' + f'_fold{i}' for i in range(5)]
             labels = x[columns_label_folds].values
+            probs = x[columns_prob_folds].values
             result = dict()
             for label, prob in zip(labels, probs):
                 if label not in result.keys():
@@ -172,7 +174,6 @@ def merge_k_folds_result(df, direct_result):
     else:
         def transform_func(x, column):
             columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
-            columns_prob_folds = [column + '_prob' + f'_fold{i}' for i in range(5)]
             labels = x[columns_label_folds].values
             return np.mean(labels)
 

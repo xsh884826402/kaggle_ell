@@ -6,11 +6,11 @@ from torch.utils.data import Dataset
 class CustomDataset(Dataset):
     def __init__(self, df, cfg):
         self.cfg = cfg
-        # print("aa".s)
-        input_columns = [column for column in df.columns if any(column.startswith(item + '_label') or column.startswith(item + '_prob') for item in cfg.dataset.label_columns)]
+        input_columns = [column for column in df.columns if any(column.startswith(item + '_fold') for item in cfg.dataset.label_columns)]
         self.cfg.dataset.input_size = len(input_columns)
         self.inputs = df[input_columns].values
         self.labels = df[cfg.dataset.label_columns].values
+
 
     def __len__(self):
         return len(self.inputs)
@@ -39,7 +39,8 @@ class CustomInferDataset(Dataset):
     def __init__(self, df, cfg):
         self.cfg = cfg
         # print("aa".s)
-        input_columns = [column for column in df.columns if any(column.startswith(item + '_label') or column.startswith(item + '_prob') for item in cfg.dataset.label_columns)]
+        input_columns = [column for column in df.columns if
+                         any(column.startswith(item + '_fold') for item in cfg.dataset.label_columns)]
         self.cfg.dataset.input_size = len(input_columns)
         self.inputs = df[input_columns].values
 

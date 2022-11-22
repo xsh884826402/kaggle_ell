@@ -24,7 +24,7 @@ dataset:
     label_columns: ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
     train_dataframe: data/feedback-prize-english-language-learning/train.csv
     train_dataframe_add_fold_label_path: data/feedback-prize-english-language-learning/train_add_fold_label.csv
-    infer_dataframe: data/feedback-prize-english-language-learning/custom_test.csv
+    infer_dataframe: data/feedback-prize-english-language-learning/test.csv
 environment:
     mixed_precision: false
     number_of_workers: 4

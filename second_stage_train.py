@@ -33,6 +33,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append("models")
 sys.path.append("datasets")
 
+
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
@@ -176,24 +177,18 @@ if __name__ == "__main__":
     set_seed(cfg.environment.seed)
     # 整理合并第一阶段模型输出
     first_stage_outputs = []
-    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs )):
+    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs)):
         df_first_stage = pd.read_csv(file_path)
         if not with_prob:
-            keys = [item + "_label" for item in cfg.dataset.label_columns]
-            values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            keys = cfg.dataset.input_columns
+            values = [item + "_label" + f"_{index}" for item in cfg.dataset.input_columns]
             columns_dict = dict(zip(keys, values))
-        else:
-            label_keys = [item + "_label" for item in cfg.dataset.label_columns]
-            label_values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
-            prob_keys = [item + "_prob" for item in cfg.dataset.label_columns]
-            prob_values = [item + "_prob" + f"_{index}" for item in cfg.dataset.label_columns]
-            columns_dict = dict(zip(label_keys+prob_keys, label_values+prob_values))
+
         df_first_stage.rename(columns=columns_dict, inplace=True)
         first_stage_outputs.append(df_first_stage)
     df = first_stage_outputs[0]
     for tmp in first_stage_outputs[1:]:
-        df = df.merge(tmp, on=['text_id', 'full_text'])
-    print(df.columns)
+        df = df.merge(tmp.drop(columns=['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']), on=['text_id', 'full_text'])
     keys = [item + "_x" for item in cfg.dataset.label_columns]
     values = [item for item in cfg.dataset.label_columns]
     df.rename(columns=dict(zip(keys, values)), inplace=True)
@@ -315,7 +310,6 @@ if __name__ == "__main__":
 
             cfg.curr_epoch = epoch
             print("EPOCH:", epoch)
-
             progress_bar = tqdm(range(len(train_dataloader)))
             tr_it = iter(train_dataloader)
             losses = []

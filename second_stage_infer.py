@@ -130,12 +130,13 @@ def get_predict_func(cfg):
 def get_loss_fn(cfg):
     return importlib.import_module(cfg.model_class).loss_fn
 
-
 def merge_k_folds_result(df, direct_result):
     if not direct_result:
         def transform_func(x, column):
             columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
+            columns_prob_folds = [column + '_prob' + f'_fold{i}' for i in range(5)]
             labels = x[columns_label_folds].values
+            probs = x[columns_prob_folds].values
             result = dict()
             for label, prob in zip(labels, probs):
                 if label not in result.keys():
@@ -152,24 +153,27 @@ def merge_k_folds_result(df, direct_result):
                     label = k
                     max_count = count
                     avg_prob = prob / count
+            print(f' label {label} {avg_prob}')
             return label, avg_prob
 
         columns = ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
         for column in columns:
             df[column + '_label'], df[column + '_prob'] = zip(*df.apply(transform_func, args=(column,), axis=1))
-        reserve_columns = ['text_id', 'full_text'] + [column + '_label' for column in columns] + [column + '_prob' for
-                                                                                                  column in columns]
+        #                 df[[column+'_label', column + '_prob']] = df.apply(transform_func, args = (column,), axis=1, result_type="expand")
+        reserve_columns = ['text_id', 'full_text'] + [column + '_label' for column in columns] + [column + '_prob'
+                                                                                                  for column in
+                                                                                                  columns]
+
         return df[reserve_columns]
     else:
         def transform_func(x, column):
             columns_label_folds = [column + '_label' + f'_fold{i}' for i in range(5)]
-            columns_prob_folds = [column + '_prob' + f'_fold{i}' for i in range(5)]
             labels = x[columns_label_folds].values
             return np.mean(labels)
 
         columns = ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
         for column in columns:
-            df[column + '_label']= df.apply(transform_func, args=(column,), axis=1)
+            df[column + '_label'] = df.apply(transform_func, args=(column,), axis=1)
         reserve_columns = ['text_id', 'full_text'] + [column + '_label' for column in columns]
         return df[reserve_columns]
 
@@ -198,20 +202,14 @@ if __name__ == "__main__":
     for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs)):
         df_first_stage = pd.read_csv(file_path)
         if not with_prob:
-            keys = [item + "_label" for item in cfg.dataset.label_columns]
-            values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
+            keys = cfg.dataset.input_columns
+            values = [item + "_label" + f"_{index}" for item in cfg.dataset.input_columns]
             columns_dict = dict(zip(keys, values))
-        else:
-            label_keys = [item + "_label" for item in cfg.dataset.label_columns]
-            label_values = [item + "_label" + f"_{index}" for item in cfg.dataset.label_columns]
-            prob_keys = [item + "_prob" for item in cfg.dataset.label_columns]
-            prob_values = [item + "_prob" + f"_{index}" for item in cfg.dataset.label_columns]
-            columns_dict = dict(zip(label_keys + prob_keys, label_values + prob_values))
         df_first_stage.rename(columns=columns_dict, inplace=True)
         first_stage_outputs.append(df_first_stage)
     df = first_stage_outputs[0]
     for tmp in first_stage_outputs[1:]:
-        df = df.merge(tmp, on=['text_id', 'full_text'])
+        df = df.merge(tmp.drop(columns=['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']), on=['text_id', 'full_text'])
     print(df.columns)
     keys = [item + "_x" for item in cfg.dataset.label_columns]
     values = [item for item in cfg.dataset.label_columns]

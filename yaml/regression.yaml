@@ -54,5 +54,7 @@ training:
 predicting:
     batch_size: 4
     return_probs: false
+infering:
+    infer_result_path: infer.csv
 device: "cuda:0"
 

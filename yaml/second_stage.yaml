@@ -9,15 +9,32 @@ dataset:
     fold: -1
     folds: 5
     label_columns: ['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']
+    input_columns: ['cohesion_fold_0', 'syntax_fold_0', 'vocabulary_fold_0', 'phraseology_fold_0', 'grammar_fold_0', 'conventions_fold_0', 'cohesion_fold_1', 'syntax_fold_1', 'vocabulary_fold_1', 'phraseology_fold_1', 'grammar_fold_1', 'conventions_fold_1', 'cohesion_fold_2', 'syntax_fold_2', 'vocabulary_fold_2', 'phraseology_fold_2', 'grammar_fold_2', 'conventions_fold_2', 'cohesion_fold_3', 'syntax_fold_3', 'vocabulary_fold_3', 'phraseology_fold_3', 'grammar_fold_3', 'conventions_fold_3', 'cohesion_fold_4', 'syntax_fold_4', 'vocabulary_fold_4', 'phraseology_fold_4', 'grammar_fold_4', 'conventions_fold_4', 'cohesion_fold_5', 'syntax_fold_5', 'vocabulary_fold_5', 'phraseology_fold_5', 'grammar_fold_5', 'conventions_fold_5', 'cohesion_fold_6', 'syntax_fold_6', 'vocabulary_fold_6', 'phraseology_fold_6', 'grammar_fold_6', 'conventions_fold_6', 'cohesion_fold_7', 'syntax_fold_7', 'vocabulary_fold_7', 'phraseology_fold_7', 'grammar_fold_7', 'conventions_fold_7', 'cohesion_fold_8', 'syntax_fold_8', 'vocabulary_fold_8', 'phraseology_fold_8', 'grammar_fold_8', 'conventions_fold_8', 'cohesion_fold_9', 'syntax_fold_9', 'vocabulary_fold_9', 'phraseology_fold_9', 'grammar_fold_9', 'conventions_fold_9']
     first_stage_outputs:
-        - ./output/classification_v1/predicts.csv
-        - ./output/regression_v1/predicts.csv
+        - ./outputs/first_stage_output/train_CFGlist_0.csv
+        - ./outputs/first_stage_output/train_CFGlist_1.csv
+        - ./outputs/first_stage_output/train_CFGlist_2.csv
+        - ./outputs/first_stage_output/train_CFGlist_3.csv
+        - ./outputs/first_stage_output/train_CFGlist_4.csv
+        - ./outputs/first_stage_output/train_CFGlist_5.csv
+        - ./outputs/first_stage_output/train_CFGlist_6.csv
+        - ./outputs/first_stage_output/train_CFGlist_7.csv
+        - ./outputs/first_stage_output/train_CFGlist_8.csv
+        - ./outputs/first_stage_output/train_CFGlist_9.csv
     with_probs:
-        - true
         - false
+        - false
+        - false
+        - false
+        - flase
+        - false
+        - false
+        - false
+        - false
+        - flase
 environment:
     mixed_precision: false
-    number_of_workers: 4
+    number_of_workers: 1
     seed: 42
 experiment_name: two_stage_nn
 training:
@@ -26,11 +43,11 @@ training:
     differential_learning_rate: 4.0e-06
     differential_learning_rate_layers: []
     drop_last_batch: true
-    epochs: 15
+    epochs: 25
     grad_accumulation: 1
     gradient_clip: 5
     is_pseudo: false
-    learning_rate: 8.0e-06
+    learning_rate: 1.0e-05
     loss_function: CrossEntropy
     optimizer: AdamW
     schedule: Linear
