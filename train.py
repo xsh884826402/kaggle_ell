@@ -192,13 +192,7 @@ if __name__ == "__main__":
         val_dataloader = get_val_dataloader(val_dataset, cfg)
 
         model = get_model(cfg)
-        model.to(device)
 
-        if cfg.architecture.pretrained_weights != "":
-            try:
-                load_checkpoint(cfg, model)
-            except:
-                print("WARNING: could not load checkpoint")
 
         total_steps = len(train_dataset)
 
@@ -289,9 +283,19 @@ if __name__ == "__main__":
         best_val_loss = np.inf
         optimizer.zero_grad()
         best_score = np.inf
-        # debug
-        # for epoch in range(cfg.training.epochs):
-        for epoch in range(1):
+        # 增加断点续训功能
+        start_epoch = -1
+        checkpoint_path = f"output/{cfg.experiment_name}/fold{fold}_checkpoint.pth"
+        if os.path.exists(checkpoint_path):
+            checkpoint = torch.load(checkpoint_path)
+            model.load_state_dict(checkpoint["model"])
+            optimizer.load_state_dict((checkpoint["optimizer"]))
+            start_epoch = (checkpoint["epoch"])
+            scheduler.load_state_dict((checkpoint["scheduler"]))
+            print("成功从{}加载缓存信息!".format(checkpoint_path))
+        model.to(device)
+
+        for epoch in range(start_epoch+1, cfg.training.epochs):
 
             set_seed(cfg.environment.seed + epoch)
 
@@ -390,7 +394,12 @@ if __name__ == "__main__":
             print("Validation metric", metric)
             if metric < best_score:
                 best_score = metric
-                checkpoint = {"model": model.state_dict()}
+                checkpoint = {
+                    "model": model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'epoch': epoch,
+                    'scheduler': scheduler.state_dict()
+                }
                 torch.save(checkpoint, f"output/{cfg.experiment_name}/fold{fold}_checkpoint.pth")
 
             early_stopping(metric, model)
