@@ -9,6 +9,7 @@ import argparse
 import torch
 from torch.cuda.amp import GradScaler, autocast
 from sklearn.metrics import log_loss
+from sklearn.metrics import mean_squared_error
 from transformers import (
     get_cosine_schedule_with_warmup,
     get_linear_schedule_with_warmup,
@@ -32,7 +33,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 sys.path.append("models")
 sys.path.append("datasets")
-early_stopping = EarlyStopping(3, verbose=True)
 
 
 def worker_init_fn(worker_id):
@@ -152,6 +152,22 @@ def get_kfold(cfg):
     return train_df
 
 
+def MCRMSE(y_trues, y_preds):
+    scores = []
+    idxes = y_trues.shape[1]
+    for i in range(idxes):
+        y_true = y_trues[:,i]
+        y_pred = y_preds[:,i]
+        score = mean_squared_error(y_true, y_pred, squared=False) # RMSE
+        scores.append(score)
+    mcrmse_score = np.mean(scores)
+    return mcrmse_score, scores
+
+
+def get_score(y_trues, y_preds):
+    mcrmse_score, scores = MCRMSE(y_trues, y_preds)
+    return mcrmse_score, scores
+
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("-C", "--config", help="config filename")
 parser_args, _ = parser.parse_known_args(sys.argv)
@@ -222,6 +238,8 @@ if __name__ == "__main__":
         _ = gc.collect()
     df_final = pd.concat(preds, axis=0)
     df_final.to_csv(f"output/{cfg.experiment_name}/predicts.csv", index=False)
+    oof_score = get_score(y_trues=df[cfg.dataset.label_columns].values, y_preds=df[[item + '_label' for item in cfg.dataset.label_columns]])
+    print(f'Experiment {cfg.experiment_name} oof_score: {oof_score}')
 
 
 

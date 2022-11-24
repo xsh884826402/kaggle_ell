@@ -151,7 +151,7 @@ def get_kfold(cfg):
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("-C", "--config", help="config filename")
 parser_args, _ = parser.parse_known_args(sys.argv)
-cfg = yaml.safe_load(open(parser_args.config).read())
+cfg = yaml.safe_load(open(parser_args.config, encoding='utf-8').read())
 
 for k, v in cfg.items():
     if type(v) == dict:
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     set_seed(cfg.environment.seed)
 
     df = get_kfold(cfg)
-    df.to_csv(cfg.dataset.train_dataframe_add_fold_label_path)
+    df.to_csv(cfg.dataset.train_dataframe_add_fold_label_path, index=False)
     # tokenizer = transformers.AutoTokenizer.from_pretrained(cfg.architecture.model_name)
     for fold in range(cfg.dataset.folds):
         print(f'\n\n---------------------------FODL {fold}----------------------------------\n\n')
@@ -289,7 +289,10 @@ if __name__ == "__main__":
         best_val_loss = np.inf
         optimizer.zero_grad()
         best_score = np.inf
-        for epoch in range(cfg.training.epochs):
+        # debug
+        # for epoch in range(cfg.training.epochs):
+        for epoch in range(1):
+
             set_seed(cfg.environment.seed + epoch)
 
             cfg.curr_epoch = epoch
@@ -305,6 +308,8 @@ if __name__ == "__main__":
 
             # ==== TRAIN LOOP
             for itr in progress_bar:
+                if i==1:
+                    break
                 i += 1
                 cfg.curr_step += cfg.training.batch_size
                 inputs, labels = next(tr_it)
@@ -396,6 +401,8 @@ if __name__ == "__main__":
         if "cuda" in cfg.device:
             torch.cuda.empty_cache()
         gc.collect()
+
+    #计算oof
 
 
 

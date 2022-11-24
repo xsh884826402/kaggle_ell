@@ -178,6 +178,25 @@ def merge_k_folds_result(df, direct_result):
         return df[reserve_columns]
 
 
+def merge_first_stage_outputs(cfg):
+    # 整理合并第一阶段模型输出
+    first_stage_outputs = []
+    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs)):
+        df_first_stage = pd.read_csv(file_path)
+        if not with_prob:
+            keys = cfg.dataset.input_columns
+            values = [item + "_label" + f"_{index}" for item in cfg.dataset.input_columns]
+            columns_dict = dict(zip(keys, values))
+        df_first_stage.rename(columns=columns_dict, inplace=True)
+        first_stage_outputs.append(df_first_stage)
+    df = first_stage_outputs[0]
+    for tmp in first_stage_outputs[1:]:
+        df = df.merge(tmp, on=['text_id', 'full_text'])
+    print(df.columns)
+    keys = [item + "_x" for item in cfg.dataset.label_columns]
+    values = [item for item in cfg.dataset.label_columns]
+    df.rename(columns=dict(zip(keys, values)), inplace=True)
+
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("-C", "--config", help="config filename")
 parser_args, _ = parser.parse_known_args(sys.argv)
@@ -197,24 +216,8 @@ if __name__ == "__main__":
         cfg.environment.seed = cfg.environment.seed
 
     set_seed(cfg.environment.seed)
-    # 整理合并第一阶段模型输出
-    first_stage_outputs = []
-    for index, (file_path, with_prob) in enumerate(zip(cfg.dataset.first_stage_outputs, cfg.dataset.with_probs)):
-        df_first_stage = pd.read_csv(file_path)
-        if not with_prob:
-            keys = cfg.dataset.input_columns
-            values = [item + "_label" + f"_{index}" for item in cfg.dataset.input_columns]
-            columns_dict = dict(zip(keys, values))
-        df_first_stage.rename(columns=columns_dict, inplace=True)
-        first_stage_outputs.append(df_first_stage)
-    df = first_stage_outputs[0]
-    for tmp in first_stage_outputs[1:]:
-        df = df.merge(tmp.drop(columns=['cohesion', 'syntax', 'vocabulary', 'phraseology', 'grammar', 'conventions']), on=['text_id', 'full_text'])
-    print(df.columns)
-    keys = [item + "_x" for item in cfg.dataset.label_columns]
-    values = [item for item in cfg.dataset.label_columns]
-    df.rename(columns=dict(zip(keys, values)), inplace=True)
 
+    df = merge_first_stage_outputs(cfg)
     val_df = df
     df_k_folds = []
 

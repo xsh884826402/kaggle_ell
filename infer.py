@@ -32,7 +32,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 sys.path.append("models")
 sys.path.append("datasets")
-early_stopping = EarlyStopping(3, verbose=True)
 
 
 def worker_init_fn(worker_id):

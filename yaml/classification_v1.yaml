@@ -1,7 +1,7 @@
 dataset_class: xsh_dataset
 model_class: classification
 architecture:
-    model_name: "/home/xush/Project/AICompetition/feedback-prize/data/debertav3base"
+    model_name: "microsoft/deberta-v3-base"
     add_wide_dropout: false
 #    backbone: microsoft/deberta-large
     dropout: 0.1
@@ -27,7 +27,7 @@ dataset:
     infer_dataframe: data/feedback-prize-english-language-learning/test.csv
 environment:
     mixed_precision: false
-    number_of_workers: 4
+    number_of_workers: 1
     seed: 42
 experiment_name: classification_v1
 tokenizer_config:
@@ -35,7 +35,7 @@ tokenizer_config:
     max_length: 512
 training:
     add_types: false
-    batch_size: 4
+    batch_size: 2
     differential_learning_rate: 4.0e-06
     differential_learning_rate_layers: []
     drop_last_batch: true
@@ -59,6 +59,6 @@ predicting:
     return_probs: true
 infering:
     infer_result_path: infer.csv
-device: "cuda:0"
+device: "cpu"
 
 

@@ -6,8 +6,10 @@ from torch.utils.data import Dataset
 class CustomDataset(Dataset):
     def __init__(self, df, cfg):
         self.cfg = cfg
-        input_columns = [column for column in df.columns if any(column.startswith(item + '_fold') for item in cfg.dataset.label_columns)]
+        not_input_columns = ['text_id', 'full_text'] + cfg.dataset.label_columns
+        input_columns = [column for column in df.columns if column not in not_input_columns ]
         self.cfg.dataset.input_size = len(input_columns)
+        print(f'input columns : {input_columns}')
         self.inputs = df[input_columns].values
         self.labels = df[cfg.dataset.label_columns].values
 
@@ -38,10 +40,10 @@ class CustomDataset(Dataset):
 class CustomInferDataset(Dataset):
     def __init__(self, df, cfg):
         self.cfg = cfg
-        # print("aa".s)
-        input_columns = [column for column in df.columns if
-                         any(column.startswith(item + '_fold') for item in cfg.dataset.label_columns)]
+        not_input_columns = ['text_id', 'full_text'] + cfg.dataset.label_columns
+        input_columns = [column for column in df.columns if column not in not_input_columns]
         self.cfg.dataset.input_size = len(input_columns)
+        print(f'input columns : {input_columns}')
         self.inputs = df[input_columns].values
 
     def __len__(self):
