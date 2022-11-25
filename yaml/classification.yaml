@@ -1,7 +1,7 @@
 dataset_class: xsh_dataset
 model_class: classification
 architecture:
-    model_name: "/home/xush/Project/AICompetition/feedback-prize/data/debertav3base"
+    model_name: "microsoft/deberta-v3-large"
     add_wide_dropout: false
 #    backbone: microsoft/deberta-large
     dropout: 0.1

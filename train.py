@@ -165,6 +165,7 @@ os.makedirs(f"output/{cfg.experiment_name}", exist_ok=True)
 cfg.CustomDataset = importlib.import_module(cfg.dataset_class).CustomDataset
 
 if __name__ == "__main__":
+    cfg.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = cfg.device
 
     if cfg.environment.seed < 0:
