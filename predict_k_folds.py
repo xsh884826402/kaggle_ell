@@ -238,7 +238,7 @@ if __name__ == "__main__":
         _ = gc.collect()
     df_final = pd.concat(preds, axis=0)
     df_final.to_csv(f"output/{cfg.experiment_name}/predicts.csv", index=False)
-    oof_score = get_score(y_trues=df[cfg.dataset.label_columns].values, y_preds=df[[item + '_label' for item in cfg.dataset.label_columns]])
+    oof_score = get_score(y_trues=df_final[cfg.dataset.label_columns].values, y_preds=df_final[[item + '_label' for item in cfg.dataset.label_columns]])
     print(f'Experiment {cfg.experiment_name} oof_score: {oof_score}')
 
 
