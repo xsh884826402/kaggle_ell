@@ -310,8 +310,6 @@ if __name__ == "__main__":
 
             # ==== TRAIN LOOP
             for itr in progress_bar:
-                if i==1:
-                    break
                 i += 1
                 cfg.curr_step += cfg.training.batch_size
                 inputs, labels = next(tr_it)
