@@ -157,7 +157,6 @@ for k, v in cfg.items():
     if type(v) == dict:
         cfg[k] = SimpleNamespace(**v)
 cfg = SimpleNamespace(**cfg)
-print(cfg)
 for limit in cfg.training.gpu_limit:
     torch.cuda.set_per_process_memory_fraction(limit['fraction'], limit['device'])
 
@@ -389,7 +388,7 @@ if __name__ == "__main__":
                 # )
                 loss = model.loss_fn(outputs.detach() if cfg.architecture.direct_result else outputs.logits.detach(), labels, cfg.architecture.loss_weights).cpu().numpy()
                 losses.append(loss)
-            print(f'losses: {losses}')
+            # print(f'losses: {losses}')
             metric = np.mean(losses)
             print("Validation metric", metric)
             if metric < best_score:

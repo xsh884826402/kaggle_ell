@@ -11,9 +11,9 @@ architecture:
     num_classes_in_group: 9
     num_classes: 6
     loss_weights:
-        cross_entropy: 0.1
+        cross_entropy: 0.5
         cross_entropy_smooth: 0
-        mse: 0.9
+        mse: 0.5
         smooth_l1: 0
     prediction_mode: weighted_avg
     direct_result: false
