@@ -1,3 +1,10 @@
 .idea/
 data/
 input/
+code/*
+__pycache__/
+datasets/__pycache__/
+output/
+outputs/
+
+
