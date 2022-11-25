@@ -59,6 +59,6 @@ predicting:
     return_probs: true
 infering:
     infer_result_path: infer.csv
-device: "cpu"
+device: "cuda:0"
 
 
