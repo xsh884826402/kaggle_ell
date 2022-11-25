@@ -191,7 +191,7 @@ if __name__ == "__main__":
         val_dataloader = get_val_dataloader(val_dataset, cfg)
 
         model = get_model(cfg)
-
+        model.to(device)
 
         total_steps = len(train_dataset)
 
@@ -292,7 +292,6 @@ if __name__ == "__main__":
             start_epoch = (checkpoint["epoch"])
             scheduler.load_state_dict((checkpoint["scheduler"]))
             print("成功从{}加载缓存信息!".format(checkpoint_path))
-        model.to(device)
 
         for epoch in range(start_epoch+1, cfg.training.epochs):
 
