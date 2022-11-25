@@ -167,7 +167,6 @@ cfg.CustomDataset = importlib.import_module(cfg.dataset_class).CustomDataset
 if __name__ == "__main__":
     cfg.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = cfg.device
-
     if cfg.environment.seed < 0:
         cfg.environment.seed = np.random.randint(1_000_000)
     else:
@@ -408,8 +407,7 @@ if __name__ == "__main__":
                 print("Early Stopping")
                 break
         del model
-        if "cuda" in cfg.device:
-            torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         gc.collect()
 
     #计算oof
