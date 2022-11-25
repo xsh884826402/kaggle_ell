@@ -26,7 +26,7 @@ class Net(nn.Module):
         self.model = AutoModel.from_pretrained(cfg.architecture.model_name, config=self.config)
 
         self.dropouts_len = 3
-        self.dropouts = nn.ModuleList([nn.Dropout(p=0.2 * i) for i in range(1, 1 + self.dropouts_len)])
+        self.dropouts = nn.ModuleList([nn.Dropout(p=0.2) for i in range(1, 1 + self.dropouts_len)])
 
         self.pooler = MeanPooling()
         self.fc = nn.Linear(self.config.hidden_size, cfg.architecture.total_num_classes)

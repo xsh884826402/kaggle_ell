@@ -11,9 +11,9 @@ architecture:
     num_classes_in_group: 9
     num_classes: 6
     loss_weights:
-        cross_entropy: 0
+        cross_entropy: 0.7
         cross_entropy_smooth: 0
-        mse: 1.0
+        mse: 0.3
         smooth_l1: 0
     prediction_mode: weighted_avg
     direct_result: false
@@ -34,7 +34,7 @@ tokenizer_config:
     max_length: 512
 training:
     add_types: false
-    batch_size: 4
+    batch_size: 8
     differential_learning_rate: 4.0e-05
     differential_learning_rate_layers: []
     drop_last_batch: true
